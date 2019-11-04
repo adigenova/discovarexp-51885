@@ -20,7 +20,11 @@ make install
 cp $PWD/ljemalloc/lib/libjemalloc.a ${ROOT}/src/
 #we comeback to root directory
 cd ${ROOT}
-./configure --prefix=$PWD/dnovo --with-jemalloc=${ROOT}/deps/jemalloc/ljemalloc/lib
+#dynamic link to jemalloc
+#./configure --prefix=$PWD/dnovo --with-jemalloc=${ROOT}/deps/jemalloc/ljemalloc/lib
+#static link to jemalloc
+./configure --prefix=$PWD/dnovo
 make -j ${CORES}
 make install
-
+#strip the code
+strip $PWD/dnovo/bin/*
