@@ -11,7 +11,7 @@
 ############################################################
 AC_DEFUN([AC_JEMALLOC_LIB],
  [
-  JEMALLOC_LIB="-ljemalloc"       
+  JEMALLOC_LIB="libjemalloc.a"       
 
   AC_ARG_WITH([jemalloc],
         AS_HELP_STRING([--with-jemalloc=DIR],
@@ -19,7 +19,7 @@ AC_DEFUN([AC_JEMALLOC_LIB],
         [
         if test -d $withval
         then
-            JEMALLOC_LIB="-L$withval -Wl,-rpath,$withval -ljemalloc"
+            JEMALLOC_LIB="-L$withval -Wl,-rpath,$withval -ljemalloc -static"
         else
             AC_MSG_ERROR(--with-jemalloc expected directory name)
         fi
