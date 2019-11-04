@@ -2,7 +2,8 @@
 This repo contains a copy of the DiscovarDenovo short-read assembler developed by Broad Institute.
 The repo is a mirror of [discovarexp-51885](ftp://ftp.broadinstitute.org/pub/crd/DiscovarDeNovo/latest_source_code/discovarexp/discovarexp-51885.tar.gz)
  
-
+## Note for building process
+To compile this code you need a GCC 4.8, newer GCC (>7.x) do not compile.
 
 DISCOVAR de novo (Experimental)
 ===============================
