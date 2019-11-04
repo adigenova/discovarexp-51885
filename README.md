@@ -1,6 +1,6 @@
 # DiscovarDenovo
 This repo contains a copy of the DiscovarDenovo short-read assembler developed by Broad Institute.
-The repo is a mirror of (ftp://ftp.broadinstitute.org/pub/crd/DiscovarDeNovo/latest_source_code/discovarexp/discovarexp-51885.tar.gz)[discovarexp-51885]
+The repo is a mirror of [discovarexp-51885](ftp://ftp.broadinstitute.org/pub/crd/DiscovarDeNovo/latest_source_code/discovarexp/discovarexp-51885.tar.gz)
  
 
 
