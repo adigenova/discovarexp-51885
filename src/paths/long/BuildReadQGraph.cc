@@ -27,6 +27,14 @@
 #include "feudal/VirtualMasterVec.h"
 //#include "kmers/BigKPather.h"
 #include "kmers/ReadPatherDefs.h"
+#include "kmers/KmerDictPacked.h"
+#include "system/System.h"
+#include <omp.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 #include "math/Functions.h"
 #include "paths/KmerBaseBroker.h"
 #include "paths/UnibaseUtils.h"
@@ -52,7 +60,7 @@ unsigned const K = 60;
 typedef KMer<K> Kmer;
 typedef KMer<K-1> SubKmer;
 typedef KmerDictEntry<K> Entry;
-typedef KmerDict<K> Dict;
+typedef KmerDictPacked<K> Dict;   // M10: see docs/GraphConstruction.md
 typedef UnipathGraph<K> Graph;
 typedef std::vector<std::atomic_size_t> SpectrumBins;
 
@@ -97,103 +105,296 @@ inline void summarizeEntries( Entry* e1, Entry* e2 )
     kDef.setCount(count);
 }
 
-class Kmerizer
-{
-public:
-    Kmerizer( vecbvec const& reads, std::vector<unsigned> const& goodLengths,
-                unsigned minFreq, Dict* pDict, std::atomic_size_t* pTotKmers )
-    : mReads(reads), mGoodLengths(goodLengths), mMinFreq(minFreq),
-      mpDict(pDict), mpTotKmers(pTotKmers), mNKmers(0)
-    {}
-
-    ~Kmerizer()
-    { if ( mpTotKmers ) *mpTotKmers += mNKmers; }
-
-    template <class OItr>
-    void map( size_t readId, OItr oItr )
-    { unsigned len = mGoodLengths[readId];
-      if ( len < K+1 ) return;
-      auto beg = mReads[readId].begin(), itr=beg+K, last=beg+(len-1);
-      Kmer kkk(beg);
-      KMerContext kc = KMerContext::initialContext(*itr);
-      *oItr++ = kkk.isRev() ? Entry(Kmer(kkk).rc(),kc.rc()) : Entry(kkk,kc);
-      while ( itr != last )
-      { unsigned char pred = kkk.front();
-        kkk.toSuccessor(*itr); ++itr;
-        kc = KMerContext(pred,*itr);
-        *oItr++ = kkk.isRev() ? Entry(Kmer(kkk).rc(),kc.rc()) : Entry(kkk,kc); }
-      kc = KMerContext::finalContext(kkk.front());
-      kkk.toSuccessor(*last);
-      *oItr++ = kkk.isRev() ? Entry(Kmer(kkk).rc(),kc.rc()) : Entry(kkk,kc); }
-
-    void reduce( Entry* e1, Entry* e2 )
-    { summarizeEntries(e1,e2);
-      if ( e1->getKDef().getCount() >= mMinFreq )
-      { ++mNKmers;
-        if ( mpDict ) mpDict->insertEntry(std::move(*e1)); } }
-
-    Entry* overflow( Entry* e1, Entry* e2 )
-    { if ( e2-e1 > 1 ) summarizeEntries(e1,e2); return e1+1; }
-
-private:
-    vecbvec const& mReads;
-    std::vector<unsigned> const& mGoodLengths;
-    unsigned mMinFreq;
-    Dict* mpDict;
-    std::atomic_size_t* mpTotKmers;
-    size_t mNKmers;
-};
-typedef MapReduceEngine<Kmerizer,Entry,Kmer::Hasher> KMRE;
+// M9/M10 (docs/GraphConstruction.md, section 7): stream canonical kmer
+// instances to hash-partitioned disk bins, sort and reduce the bins a few
+// at a time, and build the packed dictionary from the deduplicated
+// qualified stream.  Replaces the allowance-bound in-RAM MapReduce pool.
 
 Dict* createDict( vecbvec const& reads, ObjectManager<VecPQVec>& quals,
-                        unsigned minQual, unsigned minFreq )
+     unsigned minQual, unsigned minFreq, const String& tmp_dir )
 {
-    // figure out how much of the read to kmerize by examining quals
-    //std::cout << Date() << ": processing quals." << std::endl;
-    std::vector<unsigned> goodLens(reads.size());
-    parallelForBatch(0ul,reads.size(),100000,
-                         GoodLenTailFinder(quals.load(),minQual,&goodLens));
-    quals.unload();
-    size_t nKmers = std::accumulate(goodLens.begin(),goodLens.end(),0ul);
+     // figure out how much of the read to kmerize by examining quals
 
-    if ( nKmers == 0 )
-    {    cout << "\nLooks like your input data have almost no good bases.\n"
-              << "Giving up.\n" << endl;
-         Scram(1);    }
+     std::vector<unsigned> goodLens(reads.size());
+     parallelForBatch(0ul,reads.size(),100000,
+          GoodLenTailFinder(quals.load(),minQual,&goodLens));
+     quals.unload();
+     size_t nKmers = std::accumulate(goodLens.begin(),goodLens.end(),0ul);
 
-    size_t dictSize;
-    if ( true )
-    { // count uniq kmers that occur at minFreq or more
-        std::atomic_size_t nUniqKmers(0);
-        Kmerizer impl(reads,goodLens,minFreq,nullptr,&nUniqKmers);
-        KMRE mre(impl);
-        if ( !mre.run(nKmers,0ul,reads.size(),KMRE::VERBOSITY::QUIET,.9,
-             mrePoolBytes(nKmers,sizeof(Entry)) ) )
-            FatalErr("Failed to count unique kmers.  Out of buffer space.  ");
-        dictSize = nUniqKmers;
-    }
+     if ( nKmers == 0 )
+     {    cout << "\nLooks like your input data have almost no good bases.\n"
+               << "Giving up.\n" << endl;
+          Scram(1);    }
 
-    // kmerize reads into dictionary
-    Dict* pDict = new Dict(dictSize);
-    Kmerizer impl(reads,goodLens,minFreq,pDict,nullptr);
-    KMRE mre(impl);
-    if ( !mre.run(nKmers,0ul,reads.size(),KMRE::VERBOSITY::QUIET,.9,
-         mrePoolBytes(nKmers,sizeof(Entry)) ) )
-        FatalErr("Failed to kmerize.  Out of buffer space.  ");
+     // Determine instance count (an upper bound, as before).
 
-    // some kmers were discarded because they didn't occur often enough to
-    // convince us that they were real -- recompute adjacencies to compensate
-    // for these missing kmers.
-    if ( minFreq > 1 )
-        pDict->recomputeAdjacencies();
+     typedef Dict::word_t word_t;
+     unsigned const WORDS = Dict::WORDS;
+     size_t const recBytes = WORDS*sizeof(word_t) + 1;   // kmer words + ctx
+     size_t nInstances = 0;
+     for ( size_t i = 0; i < goodLens.size(); i++ )
+          if ( goodLens[i] >= K+1 )
+               nInstances += goodLens[i] - K + 1;
 
-    return pDict;
+     // Choose bin and bucket parameters.
+
+     size_t const binBytes = nInstances * recBytes;
+     size_t const budget = MemAvailable(.25);
+     int const nThreads = getConfiguredNumThreads();
+     size_t binTarget = budget / ( 4*size_t(nThreads) );
+     if ( binTarget < (16ul<<20) ) binTarget = 16ul<<20;
+     if ( binTarget > (256ul<<20) ) binTarget = 256ul<<20;
+     size_t nBins = binBytes / binTarget;
+     if ( nBins < 16 ) nBins = 16;
+     if ( nBins > 992 ) nBins = 992;
+     unsigned nBuckets = unsigned( nInstances / ( Max(1u,minFreq) * 4096 ) );
+     unsigned bpow = 12;
+     while ( (1u<<bpow) < nBuckets && bpow < 21 ) bpow++;
+     nBuckets = 1u << bpow;
+     size_t const qRecBytes = WORDS*sizeof(word_t) + 1 + 4 + 4;
+
+     cout << Date( ) << ": M9 kmerize: "
+          << ToStringAddCommas(nInstances) << " kmer instances, "
+          << nBins << " bins, " << nBuckets << " buckets" << endl;
+
+     // Create bin files and the qualified stream.
+
+     String binDir = tmp_dir + "/kmer_bins";
+     Mkdir777(binDir);
+     std::vector<int> fds(nBins);
+     for ( size_t i = 0; i < nBins; i++ )
+     {    String path = binDir + "/bin." + ToString(i);
+          fds[i] = open( path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644 );
+          if ( fds[i] < 0 ) FatalErr("Failed to open " << path << ".");    }
+     int qfd = open( (binDir + "/qual.bin").c_str(),
+          O_WRONLY | O_CREAT | O_TRUNC, 0644 );
+     if ( qfd < 0 ) FatalErr("Failed to open qualified kmer stream.");
+
+     // Pass 1: kmerize reads, streaming packed records to disk bins.
+     // parallelFor is pthread-based (WorklistN), so per-thread state is
+     // chunk-local: each work item owns its read range and its buffers,
+     // and flushes them before returning.
+
+     {    size_t const nChunks = 10*size_t(nThreads);
+          size_t const chunkReads = 1 + reads.size()/nChunks;
+          auto writeAll = []( int fd, char const* p, size_t n, size_t off )
+          {    while ( n )
+               {    ssize_t w = pwrite( fd, p, n, off );
+                    if ( w < 0 && errno == EINTR ) continue;
+                    if ( w <= 0 ) FatalErr("pwrite failed.");
+                    p += w; off += (size_t)w; n -= (size_t)w;    }    };
+          // Shared per-bin append offsets: chunks reserve byte ranges
+          // atomically, so their writes interleave but never collide.
+          std::vector< std::atomic<size_t> > binOff(nBins);
+          for ( size_t i = 0; i < nBins; i++ ) binOff[i] = 0;
+          parallelFor( 0ul, nChunks,
+               [&]( size_t chunkId )
+               {    std::vector< std::vector<char> > bufs(nBins);
+                    size_t const FLUSH = 16384;
+                    size_t beg = chunkId * chunkReads;
+                    size_t end = beg + chunkReads;
+                    if ( end > reads.size() ) end = reads.size();
+                    for ( size_t readId = beg; readId < end; readId++ )
+                    {    unsigned len = goodLens[readId];
+                         if ( len < K+1 ) continue;
+                         auto begp = reads[readId].begin(), itr = begp+K,
+                              last = begp+(len-1);
+                         Kmer kkk(begp);
+                         KMerContext kc = KMerContext::initialContext(*itr);
+                         auto emit = [&]( KMer<K> const& kmer,
+                              KMerContext const& ctx )
+                         {    word_t w[WORDS];
+                              Dict::wordsOf( kmer, w );
+                              size_t bin = Dict::hashWords(w) % nBins;
+                              std::vector<char>& buf = bufs[bin];
+                              if ( buf.size() + recBytes > FLUSH )
+                              {    size_t off =
+                                        binOff[bin].fetch_add( buf.size() );
+                                   writeAll( fds[bin], buf.data(),
+                                        buf.size(), off );
+                                   buf.clear();    }
+                              char const* pw =
+                                   reinterpret_cast<char const*>(w);
+                              buf.insert( buf.end(), pw,
+                                   pw+WORDS*sizeof(word_t) );
+                              buf.push_back( (char)
+                                   ( ( ctx.getPredecessors() << 4 )
+                                   | ctx.getSuccessors() ) );    };
+                         if ( kkk.isRev() )
+                              emit( Kmer(kkk).rc(), kc.rc() );
+                         else emit( kkk, kc );
+                         while ( itr != last )
+                         {    unsigned char pred = kkk.front();
+                              kkk.toSuccessor(*itr); ++itr;
+                              kc = KMerContext(pred,*itr);
+                              if ( kkk.isRev() )
+                                   emit( Kmer(kkk).rc(), kc.rc() );
+                              else emit( kkk, kc );    }
+                         kc = KMerContext::finalContext(kkk.front());
+                         kkk.toSuccessor(*last);
+                         if ( kkk.isRev() )
+                              emit( Kmer(kkk).rc(), kc.rc() );
+                         else emit( kkk, kc );    }
+
+                    // Flush this chunk's buffers.
+
+                    for ( size_t bin = 0; bin < nBins; bin++ )
+                         if ( !bufs[bin].empty() )
+                         {    size_t off =
+                                   binOff[bin].fetch_add( bufs[bin].size() );
+                              writeAll( fds[bin], bufs[bin].data(),
+                                   bufs[bin].size(), off );    }    } );    }
+
+     for ( size_t i = 0; i < nBins; i++ ) close(fds[i]);
+
+     // Pass 2: sort and reduce bins, a few at a time; stream qualifying
+     // kmers to the qualified record file (words + ctx + count + bucket).
+
+     {    std::atomic<size_t> qoff(0);
+          std::vector< std::vector<unsigned> > bcounts(nThreads);
+          std::vector< std::vector<char> > qbuf(nThreads);
+          for ( int t = 0; t < nThreads; t++ )
+               bcounts[t].resize(nBuckets,0);
+          size_t perBinBytes = binBytes / nBins;
+          if ( perBinBytes < (16ul<<20) ) perBinBytes = 16ul<<20;
+          int conc = int( budget / ( perBinBytes + (perBinBytes>>1) ) );
+          if ( conc < 1 ) conc = 1;
+          if ( conc > nThreads ) conc = nThreads;
+          #pragma omp parallel for schedule(dynamic,1) num_threads(conc)
+          for ( int64_t bin = 0; bin < (int64_t) nBins; bin++ )
+          {    int t = omp_get_thread_num();
+               struct BinRec
+               {    word_t w[WORDS];
+                    unsigned char ctx;    };
+               String path = binDir + "/bin." + ToString(bin);
+               FILE* fin = fopen( path.c_str(), "rb" );
+               if ( !fin ) FatalErr("Failed to open " << path << ".");
+               fseek( fin, 0, SEEK_END );
+               size_t sz = ftell( fin );
+               fseek( fin, 0, SEEK_SET );
+               size_t nrec = sz / recBytes;
+               std::vector<BinRec> recs(nrec);
+               if ( nrec )
+               {    std::vector<char> raw(sz);
+                    if ( fread( raw.data(), 1, sz, fin ) != sz )
+                         FatalErr("Failed to read " << path << ".");
+                    for ( size_t i = 0; i < nrec; i++ )
+                    {    memcpy( recs[i].w, raw.data()+i*recBytes,
+                              WORDS*sizeof(word_t) );
+                         recs[i].ctx =
+                              (unsigned char) raw[i*recBytes+WORDS*sizeof(word_t)];    }    }
+               fclose( fin );
+               std::sort( recs.begin(), recs.end(),
+                    []( BinRec const& a, BinRec const& b )
+                    {    for ( unsigned j = 0; j < WORDS; j++ )
+                         {    if ( a.w[j] != b.w[j] ) return a.w[j] < b.w[j];    }
+                         return a.ctx < b.ctx;    } );
+
+               // Reduce groups and stream qualifying kmers.
+
+               auto writeAll = []( int fd, char const* p, size_t n, size_t off )
+               {    while ( n )
+                    {    ssize_t w = pwrite( fd, p, n, off );
+                         if ( w <= 0 ) FatalErr("pwrite failed.");
+                         p += w; off += (size_t)w; n -= (size_t)w;    }    };
+               size_t i = 0;
+               while ( i < nrec )
+               {    size_t j = i+1;
+                    unsigned char ctxor = recs[i].ctx;
+                    while ( j < nrec && 0 == memcmp( recs[j].w, recs[i].w,
+                              WORDS*sizeof(word_t) ) )
+                    {    ctxor |= recs[j].ctx;    j++;    }
+                    unsigned count = unsigned( j - i );
+                    if ( count >= minFreq )
+                    {    unsigned bucket =
+                              unsigned( Dict::hashWords(recs[i].w)
+                              & (nBuckets-1) );
+                         bcounts[t][bucket]++;
+                         std::vector<char>& buf = qbuf[t];
+                         if ( buf.size() + qRecBytes > 65536 )
+                         {    size_t off = qoff.fetch_add( buf.size() );
+                              writeAll( qfd, buf.data(), buf.size(), off );
+                              buf.clear();    }
+                         char const* pw =
+                              reinterpret_cast<char const*>(recs[i].w);
+                         buf.insert( buf.end(), pw, pw+WORDS*sizeof(word_t) );
+                         buf.push_back( (char) ctxor );
+                         char pc[8];
+                         memcpy( pc, &count, 4 );
+                         buf.insert( buf.end(), pc, pc+4 );
+                         memcpy( pc, &bucket, 4 );
+                         buf.insert( buf.end(), pc, pc+4 );    }
+                    i = j;    }    }
+
+          for ( int t = 0; t < nThreads; t++ )
+          {    std::vector<char>& buf = qbuf[t];
+               if ( buf.empty() ) continue;
+               size_t off = qoff.fetch_add( buf.size() );
+               while ( !buf.empty() )
+               {    ssize_t w = pwrite( qfd, buf.data(), buf.size(), off );
+                    if ( w <= 0 ) FatalErr("pwrite failed.");
+                    off += (size_t)w;
+                    buf.erase( buf.begin(), buf.begin()+w );    }    }
+          close(qfd);
+
+          // Merge bucket counts.
+
+          std::vector<size_t> bucketCounts(nBuckets,0);
+          for ( int t = 0; t < nThreads; t++ )
+               for ( unsigned b = 0; b < nBuckets; b++ )
+                    bucketCounts[b] += bcounts[t][b];
+          size_t nQ = 0;
+          for ( unsigned b = 0; b < nBuckets; b++ ) nQ += bucketCounts[b];
+          cout << Date( ) << ": M9 qualified kmers = "
+               << ToStringAddCommas(nQ) << endl;
+
+          // Build the packed dictionary (M10) from the qualified stream.
+
+          Dict* pDict = new Dict(nBuckets);
+          pDict->beginBulk( nQ, bucketCounts );
+          {    FILE* fin = fopen( (binDir + "/qual.bin").c_str(), "rb" );
+               if ( !fin ) FatalErr("Failed to reopen qualified stream.");
+               std::vector<char> buf(1<<22);
+               size_t have = 0;
+               while ( true )
+               {    size_t got = fread( buf.data()+have, 1,
+                         buf.size()-have, fin );
+                    size_t avail = have + got;
+                    if ( avail == 0 ) break;
+                    size_t nrec = avail / qRecBytes;
+                    for ( size_t i = 0; i < nrec; i++ )
+                    {    char const* p = buf.data() + i*qRecBytes;
+                         word_t w[WORDS];
+                         memcpy( w, p, WORDS*sizeof(word_t) );
+                         unsigned char ctx =
+                              (unsigned char) p[WORDS*sizeof(word_t)];
+                         unsigned count, bucket;
+                         memcpy( &count, p+WORDS*sizeof(word_t)+1, 4 );
+                         memcpy( &bucket, p+WORDS*sizeof(word_t)+5, 4 );
+                         pDict->placeBulk( bucket, w, ctx, count );    }
+                    have = avail - nrec*qRecBytes;
+                    if ( have ) memmove( buf.data(),
+                         buf.data()+nrec*qRecBytes, have );
+                    if ( got == 0 ) break;    }
+               fclose( fin );    }
+          pDict->finalizeBulk();
+
+          SystemSucceed( "/bin/rm -rf " + binDir );
+
+          // Some kmers were discarded because they didn't occur often
+          // enough to convince us that they were real -- recompute
+          // adjacencies to compensate for these missing kmers.
+
+          if ( minFreq > 1 ) pDict->recomputeAdjacencies();
+
+          return pDict;    }
 }
 
+template <class DictT>
 class EdgeBuilder
 {
 public:
-    EdgeBuilder( Dict const& dict, vecbvec* pEdges )
+    EdgeBuilder( DictT const& dict, vecbvec* pEdges )
     : mDict(dict), mEdges(*pEdges) {}
 
     void buildEdge( Entry const& entry )
@@ -369,17 +570,18 @@ private:
         mEdgeSeq.clear();
         mEdgeEntries.clear(); }
 
-    Dict const& mDict;
+    DictT const& mDict;
     vecbvec& mEdges;
     std::vector<Entry const*> mEdgeEntries;
     bvec mEdgeSeq;
 };
 
-void buildEdges( Dict const& dict, vecbvec* pEdges )
+template <class DictT>
+void buildEdges( DictT const& dict, vecbvec* pEdges )
 {
-    EdgeBuilder eb(dict,pEdges);
+    EdgeBuilder<DictT> eb(dict,pEdges);
     dict.parallelForEachHHS(
-            [eb]( Dict::Set::HHS const& hhs ) mutable
+            [eb]( auto const& hhs ) mutable
             { for ( Entry const& entry : hhs )
                 if ( entry.getKDef().isNull() )
                   eb.buildEdge(entry); });
@@ -555,10 +757,11 @@ private:
     unsigned mEdgeLen;
 };
 
+template <class DictT>
 class Pather
 {
 public:
-    Pather( Dict const& dict, vecbvec const& edges )
+    Pather( DictT const& dict, vecbvec const& edges )
     : mDict(dict), mEdges(edges) {}
 
     std::vector<PathPart> const& path( bvec const& read )
@@ -759,7 +962,7 @@ public:
       return os; }
 
 private:
-    Dict const& mDict;
+    DictT const& mDict;
     vecbvec const& mEdges;
     std::vector<PathPart> mPathParts;
 };
@@ -823,7 +1026,7 @@ private:
     static unsigned const MAX_JITTER = 1;
     vecbvec const& mReads;
     Dict& mDict;
-    Pather mPather;
+    Pather<Dict> mPather;
     unsigned mMaxGapSize;
     unsigned mMinFreq;
 };
@@ -852,7 +1055,7 @@ void pathRef( String const& refFasta, Dict const& dict, vecbvec const& edges )
 {
     vecbvec ref;
     FastFetchReads(ref,nullptr,refFasta);
-    Pather pather(dict,edges);
+    Pather<Dict> pather(dict,edges);
     for ( bvec const& refTig : ref )
     {
         pather.path(refTig);
@@ -987,7 +1190,7 @@ private:
 
     vecbvec const& mReads;
     vecbvec const& mEdges;
-    Pather mPather;
+    Pather<Dict> mPather;
     unsigned mMaxGapSize;
     unsigned mMinFreq;
     vecbvec& mFakeReads;
@@ -1019,13 +1222,14 @@ void joinOverlaps( vecbvec const& reads, unsigned maxGapSize, unsigned minFreq,
 }
 
 
+template <class DictT>
 class HBVPather
 {
 public:
     typedef enum {ALGORITHM_ONE, ALGORITHM_TWO} Algorithm;
 
     HBVPather( vecbvec const& reads, VecPQVec const& quals,
-                Dict const& dict, vecbvec const& edges,
+                DictT const& dict, vecbvec const& edges,
                 HyperBasevector const& hbv,
                 vec<int> const& fwdEdgeXlat, vec<int> const& revEdgeXlat,
                 Algorithm alg, ReadPathVec* pPaths, Bool const verbose = False )
@@ -1262,7 +1466,7 @@ private:
     vec<int> mToLeft, mToRight;
     vec<int> const& mFwdEdgeXlat;
     vec<int> const& mRevEdgeXlat;
-    Pather mPather;
+    Pather<DictT> mPather;
     Algorithm mAlgorithm;
     ReadPathVec& mPaths;
     ReadPath mPath;
@@ -1271,16 +1475,17 @@ private:
     qvec mQV;
 };
 
+template <class DictT>
 void pathReads( vecbvec const& reads, VecPQVec const& quals,
-                Dict const& dict, vecbvec const& edges,
+                DictT const& dict, vecbvec const& edges,
                 HyperBasevector const& hbv,
                 vec<int> const& fwdEdgeXlat, vec<int> const& revEdgeXlat,
                 ReadPathVec* pPaths, Bool const NEW_ALIGNER = False,
                 Bool const VERBOSE = False )
 {
     pPaths->clear().resize(reads.size());
-    auto algorithm = NEW_ALIGNER ? HBVPather::ALGORITHM_TWO : HBVPather::ALGORITHM_ONE;
-    HBVPather pather(reads,quals,dict,edges,hbv,fwdEdgeXlat,revEdgeXlat,
+    auto algorithm = NEW_ALIGNER ? HBVPather<DictT>::ALGORITHM_TWO : HBVPather<DictT>::ALGORITHM_ONE;
+    HBVPather<DictT> pather(reads,quals,dict,edges,hbv,fwdEdgeXlat,revEdgeXlat,
               algorithm,pPaths,VERBOSE);
     parallelForBatch(0ul,reads.size(),100000,pather);
 }
@@ -1306,11 +1511,11 @@ void buildReadQGraph( vecbvec const& reads, ObjectManager<VecPQVec>& quals,
                         String const& refFasta,
          		bool useNewAligner, bool repathUnpathed,
                         HyperBasevector* pHBV, ReadPathVec* pPaths,
-                        bool const VERBOSE )
+                        bool const VERBOSE, const String& tmp_dir )
 {
     //std::cout << Date() << ": loading reads." << std::endl;
 
-    Dict* pDict = createDict(reads,quals,minQual,minFreq);
+    Dict* pDict = createDict(reads,quals,minQual,minFreq,tmp_dir);
 
     // figure out the complete base sequence of each edge
     //std::cout << Date() << ": finding edge sequences." << std::endl;
@@ -1355,7 +1560,7 @@ void rePath( HyperBasevector const& hbv,
                 bool useNewAligner, bool verbose,
                 HyperBasevector* pNewHBV, ReadPathVec* pPaths )
 {
-    Dict dict(SizeSum(hbv.Edges())/2);
+    KmerDict<K> dict(SizeSum(hbv.Edges())/2);   // legacy: feudal dict
     DictionaryKmerEater<K> eater(&dict);
     parallelFor(0,hbv.EdgeObjectCount(),
             [&hbv,&eater]( size_t edgeId )

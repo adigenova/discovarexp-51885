@@ -584,18 +584,126 @@ Measured on the E. coli 50× test: **peak 6.8 GB → 1.1 GB**, runtime
 that the pool size affects buffering only, not the dictionary or the
 assembly.
 
+### M9 — hash-partitioned disk bins for the K=60 kmerize ⓔⓜ — **IMPLEMENTED**
+
+The KMC3/DSK lesson: the kmerize never needed a giant in-RAM sort pool —
+it needed *partitioning*. `createDict` now streams each canonical
+k-mer instance to one of N **disk bins** (record = raw kmer words + 1
+context byte, 17 B at K=60; bin = a cheap word-hash of the canonical
+kmer % N). Per-thread 16 KB append buffers with lock-free `pwrite` at
+per-thread offsets keep the writers parallel; N is chosen for ~256 MB
+bins, capped at 992 (file-descriptor limit). Bins are then processed a
+few at a time (concurrency capped by a memory budget): each bin is
+read, sorted in RAM as packed records, and reduced with the exact
+`summarizeEntries` semantics (group size = count, OR of context bytes)
+— qualifying kmers are streamed to a compact 25 B *qualified* record
+file (words, context, count, bucket id). The dictionary is then built
+directly from that stream (below). This eliminates the allowance-bound
+MapReduce pool at every scale, at the cost of ~17 B/instance of
+temporary disk (≈ the read set in 2-bit + slack), and *no* Bloom filter
+is needed (the error-k-mer explosion makes Bloom sizing
+O(distinct-including-errors) ≈ 30–40× the real kmer space — see the
+exploration notes in the repo history).
+
+As landed (`createDict` in `BuildReadQGraph.cc`): pass 1 kmerizes reads
+in ~10-per-thread work chunks, each with chunk-local bin buffers and
+atomically reserved `pwrite` byte ranges per bin; pass 2 sorts/reduces
+bins under a concurrency cap (`MemAvailable(.25)`-based); qualifying
+kmers stream to a compact record file; a sequential sweep places them
+into the M10 arena by bucket.  The old `Kmerizer`/`MapReduceEngine`
+counting passes are gone (legacy `rePath` still uses the feudal
+`KmerDict` via `DictionaryKmerEater`).  Two progress lines report the
+instance count and the qualifying kmer count.  Engineering notes from
+bring-up: per-chunk file offsets must be *shared per bin* (chunks
+overwrite each other otherwise — lock-free `fetch_add` reservation);
+`omp_get_thread_num` is invalid inside `parallelFor` (pthreads-based
+`WorklistN`), so all per-thread state is chunk-local.
+
+### M10 — bucketed sorted-array K=60 dictionary ⓔⓜ — **IMPLEMENTED**
+
+The qualifying stream from M9 is already deduplicated, so the feudal
+`HashSet` backing of the K=60 `KmerDict` is replaced (for the
+DiscovarExp path) by `KmerDictPacked<K>` (`kmers/KmerDictPacked.h`): a
+contiguous arena of 24 B `KmerDictEntry`s, bucketed by the same
+word-hash into ~4 K entries per bucket (directory = prefix offsets),
+sorted by kmer within each bucket, with the full `KmerDict` method
+surface ported (`findEntry`/`findEntryCanonical` = bucket + binary
+search over an ~80 KB range; `apply`/`applyCanonical`; bulk + legacy
+`insertEntry`; `parallelForEachHHS` over disjoint array chunks;
+`nullEntries`; `recomputeAdjacencies`; HHS-style iteration; a
+single-threaded legacy `process`). Savings versus the HashSet:
+no 1 B/slot status, no 0.75 load-factor slack, no split transients
+(a hash split briefly doubles its table), and *exact* sizing from the
+qualifying count — ~24 B/kmer contiguous versus ~33 B effective, i.e.
+~1.4× on the largest stage-A structure, plus better cache behavior for
+the EdgeBuilder walk. Legacy code keeps the old `KmerDict` (`rePath`
+pins to it explicitly). The K=200 dictionary is *not* converted here —
+it has no sorted-input stream yet; that becomes **M10b**, naturally
+built on a stage-B binning pass.
+
+**Caveat (acceptance):** dictionary iteration order changes, so edge
+id assignment is relabeled and the `final checksum` is *expected* to
+change. The equality gate is: identical stats block (edges/kb, N50s,
+recovery, perfect stretch, misassemblies), identical `a.fasta`
+edge-sequence multiset, and bit-identical output across reruns.
+
+As landed, on the E. coli 50× test: **stats block byte-identical,
+edge-sequence multiset fingerprint identical, and the final checksum
+itself identical (617468569301748) across 8 consecutive runs** — the
+edge walk reproduces the same assignment order in practice.  Peak
+memory 1.2–1.3 GB (vs 1.1 GB under M8; the arena plus bin sorts
+displace the pool at this scale — the structural win is at genome
+scale, where the allowance-bound pool disappears entirely).  Bring-up
+notes: the context byte round-trip must preserve the KMerContext
+nibble layout (preds high, succs low — a swapped decode produces
+overlapping edge walks, caught by `addEdge`'s "preoccupied kmers"
+check); the whole-dict iterator must not re-enter `settle()` after
+arena exhaustion (it parks back at the arena start, looping forever).
+
+### M11 — minimizer-sparse dictionaries ⓗ (planned)
+
+Store only anchors: the 1-in-w minimizer subset of kmers (plus unitig
+boundary handles), à la sparse de Bruijn graphs (Chikhi et al.) and
+BLight. Theory says the graph is *identical* if the scheme is
+deterministic, strand-symmetric, and handles are kept — and Discovar
+has two lucky properties: K=60 and K=200 are both even (no palindromic
+kmers), and canonical minimizers preserve the involution. Persistent
+dictionaries drop ~10–20× (anchors-as-views for K=200 ≈ 16 B each).
+The one honest semantic change is at K=60: trust becomes per-anchor
+rather than per-kmer (interior counts never individually observed);
+practically negligible, but it must be gated by the M10 acceptance
+procedure on real data. Requires a bounded-density minimizer scheme
+(bd-anchors/mod-minimizers, not naive lexicographic) to avoid anchor
+deserts in tandem repeats.
+
+### M12 — retire post-construction dictionaries via an edge-minimizer
+index ⓗ (planned)
+
+`KDef` exists only to path reads; the Pather is already seed-then-extend.
+Seeding on minimizers *of edge sequences* (minimap2-style) needs only
+the trusted sequence plus a ~12 B/anchor index — no per-kmer structure
+at all after construction. Human-scale peak plausibly lands at
+~15–25 GB, and the same index is exactly the LR-1 substrate the ONT
+plan needs (projection of long reads onto the graph) — dual-use.
+
 ### Expected result and order of attack
 
-| Step | Peak during Repath (approx.) |
-|---|---|
-| current | ~250–450 GB |
-| + M2 (unload reads) | −45 GB from the peak window |
-| + M1 (right-size dict) | dict pinned at ~110–120 GB |
-| + M3 (16 B entries, LF 0.9) | dict ~60–70 GB |
-| total | **~130–160 GB** |
+| Layer | Stage A transient | Persistent dicts | Peak estimate |
+|---|---|---|---|
+| today (M1/2/8) | allowance-bound pool | 113 + 115 GB | ~150–160 GB |
+| + M8 (pool by need) | same at human scale; 1.1 GB on E. coli | 113 + 115 GB | ~150–160 GB |
+| + M9 (disk bins) | ~1–2 GB + disk ≈ readset×2.2 B (E. coli: 1.2–1.3 GB peak) | 113 + 115 GB | ~200 GB (dict-bound) |
+| + M10 (bucketed array, K=60) | — | ~82 + 115 GB (E. coli dict: 4.6M×24 B = 110 MB) | ~160 GB |
+| + M10b (K=200, needs stage-B bins) | — | ~82 + ~58 GB | ~120 GB |
+| + M11 (minimizer-sparse) | — | ~6 + ~7 GB | ~35 GB (paths60 co-dominant → flatten) |
+| + M12 (edge-minimizer pathing) | — | none | **~15–25 GB** |
 
-Order: **M2 → M1 → M3 → M5 → (M4, M6, M7 opportunistically).**
-M2 and M1 are small, low-risk diffs; M3/M5 are contained refactors.
+E. coli sanity at every layer: trivial memory; its role is the
+acceptance gate (stats block + edge-sequence multiset + rerun
+determinism).
+
+Order: **M2 → M1 → M8 → M9 → M10 → [M10b] → M11 → M12.**
+M2/M1/M8/M9/M10 are landed; M11+ are planned.
 
 ---
 

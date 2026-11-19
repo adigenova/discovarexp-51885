@@ -40,7 +40,8 @@ void buildReadQGraph( vecbvec const& reads, ObjectManager<VecPQVec>& quals,
                         String const& refFasta,
        		        bool useNewAligner, bool repathUnpathed,
                         HyperBasevector* pHBV, ReadPathVec* pPaths,
-                        bool const VERBOSE = False );
+                        bool const VERBOSE = False,
+                        String const& tmp_dir = "" );
 
 void rePath( HyperBasevector const& hbv,
                 vecbvec const& reads, VecPQVec const& quals,

@@ -804,7 +804,8 @@ int GapToyCore( int argc, char *argv[] )
                     0, //maxGapSize
                     "", //refFasta
                     True, // new aligner
- 		    SHORT_KMER_READ_PATHER, &hbv, &paths, RQGRAPHER_VERBOSE );
+ 		    SHORT_KMER_READ_PATHER, &hbv, &paths, RQGRAPHER_VERBOSE,
+                    tmp_dir1 );
                cout << Date( ) << ": back from buildReadQGraph" << endl;
                cout << "memory in use = " 
                     << ToStringAddCommas( MemUsageBytes( ) ) << endl;

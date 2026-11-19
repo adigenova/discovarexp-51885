@@ -349,8 +349,14 @@ sequence-consistent, and the path-length N50 reproduces the reported
 133,298 exactly. **M8** (need-based MapReduce buffer pool) also landed:
 the same E. coli run now peaks at 1.1 GB instead of 6.8 GB (bit-identical
 result), so small-genome runs no longer inherit the memory profile of
-human-scale ones. Still open in P0: CI with bundled
-mini-datasets, M3 (16-byte kmer records).
+human-scale ones. **M9** (hash-partitioned disk bins for the K=60
+kmerize) and **M10** (bucketed sorted-array K=60 dictionary,
+`kmers/KmerDictPacked.h`) are also landed: the E. coli gate passes
+exactly — byte-identical stats block, identical edge-sequence
+multiset, identical final checksum across 8 runs, peak 1.2–1.3 GB.
+Still open in P0: CI with bundled mini-datasets, M3 (16-byte kmer
+records), M10b (the K=200 dictionary, which needs its own stage-B
+binning pass).
 | **P1** PE150 adaptation | parameterized read length, re-tuned pathing | PE150 `X=small` ≈ PE250-class edge accuracy |
 | **P2** LR-0/LR-1 | long-read loading + minimap2 projection onto `a.200` | ≥95% of ≥20 kb reads project onto ≥2 edges with consistent coordinates |
 | **P3** LR-2 scaffolder | line-level long-read scaffold graph, Poisson link thresholds | scaffold N50 ≥ 5× PE-only baseline on test genome; ≤1 misjoin/Mb |
