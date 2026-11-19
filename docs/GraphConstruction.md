@@ -649,7 +649,7 @@ edge-sequence multiset, and bit-identical output across reruns.
 
 As landed, on the E. coli 50× test: **stats block byte-identical,
 edge-sequence multiset fingerprint identical, and the final checksum
-itself identical (617468569301748) across 8 consecutive runs** — the
+itself identical (617468569301748) across 18 consecutive runs** — the
 edge walk reproduces the same assignment order in practice.  Peak
 memory 1.2–1.3 GB (vs 1.1 GB under M8; the arena plus bin sorts
 displace the pool at this scale — the structural win is at genome
@@ -659,6 +659,35 @@ nibble layout (preds high, succs low — a swapped decode produces
 overlapping edge walks, caught by `addEdge`'s "preoccupied kmers"
 check); the whole-dict iterator must not re-enter `settle()` after
 arena exhaustion (it parks back at the arena start, looping forever).
+
+**M10b — compact K=200 dictionary** (`BigKMer`/`BigKPather`): the
+K=200 entries shrink from 24 B pointer-views to 16 B index-views —
+`{seqIdx:u32, offset:u32, hash32:u32, rc+assigned+context}` — resolved
+through a **thread-local sequence registry** (places first, edges after
+the edge set is final) set on entry to every parallel phase, with
+rolling-scratch temporaries (`mEdgeSeq`) resolving through a
+thread-local scratch pointer.  A truncated 32-bit FNV is kept as a fast
+inequality filter and doubles as the in-bucket discriminator; the
+hopscotch load factor rises to 0.9.  Disk binning was *rejected* for
+stage B: there is no count threshold to evaluate (the input is already
+trusted), and instance materialization would add a transient the
+hash-OR insert does not have.  Human-scale dictionary: ~33 B/entry
+effective → ~19 B (≈117 GB → ~67 GB).  Critical bring-up lesson: the
+local gap assemblies run several `readsToHV` calls concurrently inside
+an OpenMP region, so a *static* registry is clobbered across blobs —
+thread-local storage is mandatory.  Acceptance: same gates as above,
+all identical, 10 consecutive runs after the fix below.
+
+**Pre-existing feudal bug found by the M10b hunt (fixed):**
+`PQVecEncoder::decode` (`feudal/PQVec.cc`) reads 64-bit words aligned
+down from each quality vector's start, so decoding the last vector in
+an exactly-sized `Mempool` pre-allocation reads up to 7 bytes past
+the pool end — an AddressSanitizer-confirmed over-read that had been
+silently absorbed by allocator slack since 2010, occasionally
+segfaulting when the pool abuts an unmapped page (the ~7% flake seen
+during M10b bring-up).  `Mempool::preAllocate` now keeps 8 bytes of
+unbooked tail slack.  After the fix: a full ASan run is clean
+end-to-end, and the E. coli battery runs 10/10 clean.
 
 ### M11 — minimizer-sparse dictionaries ⓗ (planned)
 

@@ -354,9 +354,21 @@ kmerize) and **M10** (bucketed sorted-array K=60 dictionary,
 `kmers/KmerDictPacked.h`) are also landed: the E. coli gate passes
 exactly — byte-identical stats block, identical edge-sequence
 multiset, identical final checksum across 8 runs, peak 1.2–1.3 GB.
-Still open in P0: CI with bundled mini-datasets, M3 (16-byte kmer
-records), M10b (the K=200 dictionary, which needs its own stage-B
-binning pass).
+**M10b** is also landed: compact 16-byte K=200 dictionary entries
+(`BigKMer`) with a thread-local sequence registry (places, then
+edges) and 32-bit truncated hashes, at load factor 0.9 — stage-B disk
+binning was rejected (no count threshold to evaluate at stage B, and
+instance materialization would add a transient the hash-OR insert
+does not have).  The bring-up hunt for a ~7% flake uncovered and
+fixed a **pre-existing feudal bug** with AddressSanitizer:
+`PQVecEncoder::decode` reads up to 7 bytes past the end of an
+exactly-sized `Mempool` pool when decoding the last quality vector
+(`Mempool::preAllocate` now keeps 8 bytes of unbooked tail slack; a
+full ASan run is clean end-to-end).  E. coli acceptance: stats block
+byte-identical, edge-sequence multiset identical, final checksum
+617468569301748 identical across 18 consecutive runs (10 post-fix),
+peak 1.2–1.3 GB.  Still open in P0: CI with bundled
+mini-datasets.
 | **P1** PE150 adaptation | parameterized read length, re-tuned pathing | PE150 `X=small` ≈ PE250-class edge accuracy |
 | **P2** LR-0/LR-1 | long-read loading + minimap2 projection onto `a.200` | ≥95% of ≥20 kb reads project onto ≥2 edges with consistent coordinates |
 | **P3** LR-2 scaffolder | line-level long-read scaffold graph, Poisson link thresholds | scaffold N50 ≥ 5× PE-only baseline on test genome; ≤1 misjoin/Mb |
