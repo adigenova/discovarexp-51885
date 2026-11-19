@@ -3,7 +3,15 @@ This repo contains a copy of the DiscovarDenovo short-read assembler developed b
 The repo is a mirror of [discovarexp-51885](ftp://ftp.broadinstitute.org/pub/crd/DiscovarDeNovo/latest_source_code/discovarexp/discovarexp-51885.tar.gz)
  
 ## Note for building process
-To compile this code you need a GCC 4.8, newer GCC (>7.x) do not compile.
+Builds with modern compilers (tested with GCC 16 under `-std=gnu++14`):
+
+    autoreconf -fi && ./configure && make -j
+
+jemalloc is auto-detected when present (`--with-jemalloc=DIR` to force a
+location); the legacy GCC 4.8 requirement and its dead compiler flags are
+gone. Developer notes: `docs/GraphConstruction.md` (graph construction +
+memory optimization, items M1/M2 now implemented), `docs/Modernization.md`
+(roadmap; P0 toolchain/memory work landed).
 
 DISCOVAR de novo (Experimental)
 ===============================
@@ -20,9 +28,17 @@ The INSTALL file contains information on how to configure, build, and install DI
 
 The docs directory contains documentation on DISCOVAR de novo and its associated tools:
 
-    DiscovarExp - DISCOVAR de novo manaul
-    NhoodInfo   - NhoodInfo manual
-    CrossOut    - CrossOut manual
+    DiscovarExp      - DISCOVAR de novo manual
+    NhoodInfo        - NhoodInfo manual
+    CrossOut         - CrossOut manual
+    GraphConstruction.md - developer notes: unitig graph construction (K=60 -> K=200)
+                       and memory optimization of the a.200 stage
+    Modernization.md  - developer roadmap: shallow long-read hybrid assembly
+                       (ONT/PacBio) and phasing on top of the Discovar
+                       short-read core
+
+Developer documentation on how short-read error correction is performed
+inside the codebase is in [docs/ErrorCorrection.md](docs/ErrorCorrection.md).
 
 
 For more information, visit the DISCOVAR blog:

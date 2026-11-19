@@ -906,7 +906,7 @@ void ProcessCluster( int call, unsigned int K, int seq_id, Bool rc_seq, int h1,
                offset_high = Max( offset_high, mu[r].Offset( ) );    }
           int offset = (offset_low + offset_high) / 2;
           int bandwidth = (offset_high - offset_low) / 2;
-          static align a;
+          static ::align a;
           int errs;
           SmithWatBandedA( s, bpart, offset, bandwidth + BW_ADD, a, errs,
                0, SW_MISMATCH_PENALTY, SW_GAP_PENALTY );
@@ -943,7 +943,7 @@ void ProcessCluster( int call, unsigned int K, int seq_id, Bool rc_seq, int h1,
 
      // Build alignments.
 
-     static vec<align> aligns(1000);
+     static vec<::align> aligns(1000);
      static vec<int> errors(1000);
      int aligns_length = 0, min_mutmer = Min( 12, (int) MIN_MUTMER_LENGTH );
      static vec<int> od;
@@ -963,7 +963,7 @@ void ProcessCluster( int call, unsigned int K, int seq_id, Bool rc_seq, int h1,
           static vec<Bool> mu_used;
           mu_used.resize_and_set( mu.size( ), False );
           for ( int u = 0; u < aligns_length; u++ )
-          {    const align& a = aligns[u];
+          {    const ::align& a = aligns[u];
                int p1 = a.pos1( ), p2 = a.pos2( );
                for ( int j = 0; j < a.Nblocks( ); j++ )
                {    if ( a.Gaps(j) > 0 ) p2 += a.Gaps(j);
@@ -985,7 +985,7 @@ void ProcessCluster( int call, unsigned int K, int seq_id, Bool rc_seq, int h1,
           // Save alignments.
 
           for ( int u = 0; u < aligns_length; u++ )
-          {    align& a = aligns[u];
+          {    ::align& a = aligns[u];
 
 	       // adjust the align object if necessary
 	       if ( sync_aligns_to_TACG )
@@ -2370,7 +2370,7 @@ void QueryLookupTableCore( int argc, char *argv[] )
                     {    basevector s = seq[q.query_id];
                          if ( q.Rc1( ) ) s.ReverseComplement( );
                          vec<ho_interval> perfs;
-                         align a = q.a;
+                         ::align a = q.a;
                          a.AddToPos2(-start);
                          a.PerfectIntervals1( s, t, perfs );
                          int min_perf = 0;

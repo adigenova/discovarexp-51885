@@ -167,7 +167,7 @@ class packalign {
   packalign( int pos1, int pos2, const avector<int>& gaps, 
              const avector<int>& lengths );
 
-  packalign( const align& a );
+  packalign( const ::align& a );
 
   void Set( int pos1, int pos2, const avector<int>& gaps, 
             const avector<int>& lengths, int nblocks = -1 );
@@ -218,9 +218,9 @@ class packalign {
   void ReverseThis( int b1_len, int b2_len );
 
   void SetToFlipOf( const packalign& p );
-  void SetToFlipOf( align a );
+  void SetToFlipOf( ::align a );
   void SetToReverseFlipOf( const packalign& p, int b1_len, int b2_len );
-  void SetToReverseFlipOf( align a, int b1_len, int b2_len );
+  void SetToReverseFlipOf( ::align a, int b1_len, int b2_len );
 
   // =========================================================================
   // The remaining public members are boring utilities:
@@ -592,46 +592,46 @@ class align {
   avector<int> gaps_, lengths_;
 
 };  // class align
-SELF_SERIALIZABLE(align);
+SELF_SERIALIZABLE(::align);
 
-ostream & operator<<(ostream & os, const align & a);
+ostream & operator<<(ostream & os, const ::align & a);
 
-Bool Proper( const align& a, int len1, int len2 );
+Bool Proper( const ::align& a, int len1, int len2 );
 
-void RequireProper( const align& a, int id1, int id2, Bool rc2, 
+void RequireProper( const ::align& a, int id1, int id2, Bool rc2, 
                     const vecbasevector& EE, int test_no, Bool fatal = True );
 
-void RequireProper( const align& a, int id1, int id2, Bool rc2, 
+void RequireProper( const ::align& a, int id1, int id2, Bool rc2, 
                     const vec<int>& EE_length, int test_no, Bool fatal = True );
 
 // Compute the number of errors in an alignment.
 
 template<class BASEVEC1, class BASEVEC2>
 int ActualErrors( const BASEVEC1& rd1, const BASEVEC2& rd2, 
-                  const align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
+                  const ::align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
 
 template<class BASEVEC1, class BASEVEC2>
 int ActualErrors( Bool rc, const BASEVEC1& rd1, const BASEVEC2& rd2, 
-                  const align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
+                  const ::align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
 
 int ActualErrors( const basevector& rd1, const basevector& rd2, 
-                  const align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
+                  const ::align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
 int ActualErrors( const fastavector& rd1, const basevector& rd2, 
-                  const align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
+                  const ::align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
 int ActualErrors( const vec<char>& rd1, const basevector& rd2, 
-                  const align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
+                  const ::align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
 int ActualErrors( const fastavector& rd1, const fastavector& rd2, 
-                  const align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
+                  const ::align& a, int mismatch_penalty = 1, int gap_penalty = 2 );
 
-int Bandwidth( align& a );
+int Bandwidth( ::align& a );
 
-int CorrelatePositions( const align& a, int x1 );
+int CorrelatePositions( const ::align& a, int x1 );
 
 /// Trim a basevector and an alignment on that basevector in sync.
 
 void Trim1Together(const basevector & b1, const basevector & b2, 
-		   const align & a, int startOn1, int len, 
-		   basevector & trimmedb1, align & trimmeda); 
+		   const ::align & a, int startOn1, int len, 
+		   basevector & trimmedb1, ::align & trimmeda); 
 
 /// Class placement_mark: small-size structure to keep only the
 /// target (contig) index/start position and query sequence orientation 

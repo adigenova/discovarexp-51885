@@ -154,7 +154,7 @@ bool InternalSmithWaterman( const int bandwidth,
 			    bool create_template,
 			    read_template &read_temp,
 			    bool create_alignment,
-			    align &new_alignment) {
+			    ::align &new_alignment) {
   Assert( qual1.size() == seq1.size()) ;
   Assert( qual2.size() == seq2.size()) ;
 
@@ -411,7 +411,7 @@ bool InternalSmithWaterman( const int bandwidth,
 
   bool ret = false;
   if ( create_alignment ) {
-    align align_ab( beg_a, beg_b, newgaps, newlengths ) ;
+    ::align align_ab( beg_a, beg_b, newgaps, newlengths ) ;
 
     //
     //  Score the two alignments
@@ -444,7 +444,7 @@ bool SmithWaterman( int bandwidth,
 	       int &beg_b,
 	       int &end_b  ) {
   read_template read_temp ;
-  align new_alignment ;
+  ::align new_alignment ;
   return InternalSmithWaterman( bandwidth, seq1, seq2, qual1, qual2, beg_a, end_a, beg_b, end_b,
 				false, read_temp, false, new_alignment ) ;
 }
@@ -459,7 +459,7 @@ bool SmithWaterman( const int bandwidth,
 		      int &beg_b,
 		      int &end_b,
 		      read_template &read_temp ) {
-  align new_alignment ;
+  ::align new_alignment ;
   return InternalSmithWaterman( bandwidth, seq1, seq2, qual1, qual2, beg_a, end_a, beg_b, end_b,
 				true, read_temp, false, new_alignment ) ;
 }
@@ -474,7 +474,7 @@ bool SmithWaterman( const int bandwidth,
 		      int &beg_b,
 		      int &end_b,
 		      read_template &read_temp,
-		      align &new_alignment ) {
+		      ::align &new_alignment ) {
   return InternalSmithWaterman( bandwidth, seq1, seq2, qual1, qual2, beg_a, end_a, beg_b, end_b,
 				true, read_temp, true, new_alignment ) ;
 }
@@ -485,7 +485,7 @@ bool SmithWaterman( const int bandwidth,
 		      const basevector &seq2,
 		      const qualvector &qual1,
 		      const qualvector &qual2,
-		      align &align ) {
+		      ::align &align ) {
   int beg_a = align.pos1() ;
   int beg_b = align.pos2() ;
   int end_a = min( align.Pos1() + MAXINSERTIONS, (int) seq1.size() - 1) ;

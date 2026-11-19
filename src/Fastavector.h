@@ -299,8 +299,8 @@ public:
      friend void LoadRegionsFromIndexedFastaFile( const String& fasta, const String& index,
 	     const vec<FastaRegion>& regions,
 	     vec<fastavector>& v,
-	     int pad=0,
-	     vec<std::pair<int,int>>* padded=nullptr
+	     int pad,
+	     vec<std::pair<int,int>>* padded
 	     );
 
      friend void LoadRegionFromIndexedFastaFile( const String& fasta, const fastaindex& fai,
@@ -320,16 +320,27 @@ public:
      friend void WriteScaffoldedFasta( const String &out_file,
 				       const vec<fastavector> &fasta,
 				       const vec<superb> &scaffolds,
-				       const vec<Bool> &rc = vec<Bool>( ),
-				       const int min_gap = 1, 
-				       const char gap_char = 'N',
-				       const Bool ncbi_format = False);
+				       const vec<Bool> &rc,
+				       const int min_gap, 
+				       const char gap_char,
+				       const Bool ncbi_format);
 
      // Remove contigs that don't appear in a scaffold.  
 
      friend void RenumberAndMinimize( vec<fastavector>& f, vec<superb>& s );
   
 };
+
+// Free declarations carrying the default arguments: friend
+// declarations that are not definitions may no longer specify
+// them (GCC 14+).
+void LoadRegionsFromIndexedFastaFile( const String& fasta, const String& index,
+     const vec<FastaRegion>& regions, vec<fastavector>& v, int pad = 0,
+     vec<std::pair<int,int>>* padded = nullptr );
+void WriteScaffoldedFasta( const String &out_file, const vec<fastavector> &fasta,
+     const vec<superb> &scaffolds, const vec<Bool> &rc = vec<Bool>( ),
+     const int min_gap = 1, const char gap_char = 'N',
+     const Bool ncbi_format = False);
 
 
 SELF_SERIALIZABLE(fastavector);

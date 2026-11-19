@@ -359,7 +359,7 @@ public:
 
 
   friend bool operator == (const KmerRecord & a, const KmerRecord & b)
-  { return (a._loc == b._loc && 0 == memcmp(a._kmer, b._kmer, _n_bytes)); }
+  { return (0 == memcmp(a._kmer, b._kmer, _n_bytes)); }
 
   static bool KmersEQ(const KmerRecord & a, const KmerRecord & b)
   { return (memcmp(a._kmer, b._kmer, _n_bytes) == 0); }

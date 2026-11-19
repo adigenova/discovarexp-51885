@@ -12,7 +12,7 @@ int PerfectAlignment( const basevector& rd1,
   	              const qualvector& q1,
 		      const basevector& rd2, 
 		      const qualvector& q2, 
-		      align& al, 
+		      ::align& al, 
 		      float& score,
                       Bool PERF_ALIGN_FAST_NO_MISMATCHES_IN = True,
                       Bool PERF_ALIGN_FAST_NO_MISMATCHES_OUT = True );

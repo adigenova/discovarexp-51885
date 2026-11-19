@@ -39,7 +39,7 @@ Float ReciprocalMatchRate( const alignment_plus& ap, const basevector& s1,
           perf.push_back( run + 1 );    }
      return Float(1) / WeightedMean(perf);    }
 
-Float ReciprocalMatchRate( const align& a, const basevector& s1, 
+Float ReciprocalMatchRate( const ::align& a, const basevector& s1, 
      const basevector& s2 )
 {    vec<int> perf;
      perf.clear( );

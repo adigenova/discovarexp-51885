@@ -529,7 +529,7 @@ bubble_logger::bubble_logger(const HyperBasevector& hb, const vec<int>& inv)
 
             if(edge_alt_[edge_0] < 0 || edge_alt_[edge_1]<0){
                 if( edge_alt_[edge_0]>=0 || edge_alt_[edge_1]>=0){
-                    std::cout << "inconsistent bubble, probably due to inversion properties" << std::cout;
+                    std::cout << "inconsistent bubble, probably due to inversion properties" << std::endl;
                     continue;
                 }
 
@@ -546,7 +546,7 @@ bubble_logger::bubble_logger(const HyperBasevector& hb, const vec<int>& inv)
 
                     // bad inv?
                     if( edge_0_rc<0 || edge_1_rc<0) {
-                        std::cout << "inconsistent bubble, probably due to inversion properties" << std::cout;
+                        std::cout << "inconsistent bubble, probably due to inversion properties" << std::endl;
 
                     } else // no, inv is fine.
 
@@ -554,7 +554,7 @@ bubble_logger::bubble_logger(const HyperBasevector& hb, const vec<int>& inv)
                         if ( edge_alt_[edge_0_rc] < 0 || edge_alt_[edge_1_rc]<0 ) {
 
                             if( edge_alt_[edge_0_rc]>=0 || edge_alt_[edge_1_rc]>=0) {
-                                std::cout << "inconsistent bubble, probably due to inversion properties" << std::cout;
+                                std::cout << "inconsistent bubble, probably due to inversion properties" << std::endl;
                             } else {
                                 edge_alt_[edge_0_rc]=edge_1_rc;
                                 edge_bubble_branch_[edge_0_rc] = std::make_pair(bubble_idx,2);
@@ -572,7 +572,7 @@ bubble_logger::bubble_logger(const HyperBasevector& hb, const vec<int>& inv)
             }
             else{
                 if( edge_alt_[edge_0]!=edge_1 && edge_alt_[edge_1]!=edge_0){
-                    std::cout << "inconsistent bubble, probably due to inversion properties" << std::cout;
+                    std::cout << "inconsistent bubble, probably due to inversion properties" << std::endl;
                     continue;
                 }
             }

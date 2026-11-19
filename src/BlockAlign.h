@@ -32,11 +32,11 @@ public:
 
   block_align( ) { }
   
-  block_align( const align *al, const vec<int> *mut = 0 );
+  block_align( const ::align *al, const vec<int> *mut = 0 );
   
   block_align( const look_align_plus *hit );
   
-  void SetFromAlign( const align *al, const vec<int> *mut = 0 );
+  void SetFromAlign( const ::align *al, const vec<int> *mut = 0 );
   
   void SetFromLookAlign( const look_align_plus *hit );
   
@@ -47,7 +47,7 @@ public:
   
 private:
   
-  void Setup( const align *al, const vec<int> *mut = 0 );
+  void Setup( const ::align *al, const vec<int> *mut = 0 );
   
   
 private:

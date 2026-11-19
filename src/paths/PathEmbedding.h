@@ -146,12 +146,12 @@ public:
   friend 
   bool FindPathEmbeddings( const KmerPath& sub, const KmerPath& super,
 			   vec<PathEmbedding>& ans, 
-			   int start_of_sub_on_super = -1,
-			   int end_of_sub_on_super = -1 );
+			   int start_of_sub_on_super,
+			   int end_of_sub_on_super );
 
   friend 
   bool EmbeddingExists( const KmerPath& sub, const KmerPath& super,
-			int start_of = -1, int end_of = -1 ) {
+			int start_of, int end_of ) {
     vec<PathEmbedding> will_be_ignored;
     return( FindPathEmbeddings( sub, super, will_be_ignored,
 				start_of, end_of ) );
@@ -212,10 +212,10 @@ PathEmbedding SubpathEmbedding( const KmerPath& path,
 
 bool FindPathEmbeddings( const KmerPath& sub, const KmerPath& super,
 			 vec<PathEmbedding>& ans, 
-			 int start_of_sub_on_super,
-			 int end_of_sub_on_super );
+			 int start_of_sub_on_super = -1,
+			 int end_of_sub_on_super = -1 );
 
 bool EmbeddingExists( const KmerPath& sub, const KmerPath& super,
-                        int start_of, int end_of );
+                        int start_of = -1, int end_of = -1 );
 
 #endif

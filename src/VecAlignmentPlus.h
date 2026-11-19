@@ -77,7 +77,7 @@ public:
   void SetPlainAlignment( int align_id, alignment &plain_al );
   
   // Set the align in all_aligns[ align_id ] (beware: align != alignment).
-  void SetPlainAlign( int align_id, align &plain_al );
+  void SetPlainAlign( int align_id, ::align &plain_al );
 
   // Kill aligns that fail the RequireProper test (return killed count).
   int KillImproperAligns( );

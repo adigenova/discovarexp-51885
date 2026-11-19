@@ -117,7 +117,7 @@ void FindSimilar(const basevector& selected, const vec<basevector>& edges,
 // Note that the kmer lookup is parallelized.
 
 void RestrictedAlign( const basevector& b1, const basevector& b2, 
-     const int offset, const int bandwidth, align& a )
+     const int offset, const int bandwidth, ::align& a )
 {
      // Control.
 
@@ -211,7 +211,7 @@ void RestrictedAlign( const basevector& b1, const basevector& b2,
 
      // Align.
 
-     align a2;
+     ::align a2;
      if (verbose) cout << Date( ) << ": alignment starting" << endl;
      int nerrors;
      int err = SmithWatAffineBanded( b1, b2, -offset2, bandwidth2, a2, nerrors );
@@ -290,7 +290,7 @@ void RestrictedAlign( const basevector& b1, const basevector& b2,
      a = a2;
 }
 
-int CorrelatePositionsRangeChecked( const align& a, const int x1 )
+int CorrelatePositionsRangeChecked( const ::align& a, const int x1 )
 {    
      int pos1 = a.pos1( ), pos2 = a.pos2( );
      if ( x1 < pos1 || x1 > a.Pos1()) return -1; // off the end, shouldn't happen
@@ -328,7 +328,7 @@ void DumpGraph(const String filename, const GraphT& shb) {
 // Generate insertion edits of unaligned head/tail source sequence
 // if head_ins/tail_ins are set. We don't want to call those variants near the
 // begin or end of the chromosome or chromosome segments.
-void GetEditsFromAlign(const basevector& s, const basevector& t, const align& a, 
+void GetEditsFromAlign(const basevector& s, const basevector& t, const ::align& a, 
         vec<triple<int,int,String>>* edits, vec<pair<String,String>>* change = NULL, 
         char prev_char_s = 'X', char prev_char_t = 'X', bool head_ins = false,
         bool tail_ins = true)
@@ -407,7 +407,7 @@ struct SubEdgeLoc {
 // Given the variants and callers, find the multiple placement of the caller
 // edges and genome location (gid, pos) of the alternative placement.
 void FindVariantFriends(const vec<VariantCallGroup>& vcall_groups, 
-        const vec<vec<align>>& all_aligns, const HyperBasevector& hbp,
+        const vec<vec<::align>>& all_aligns, const HyperBasevector& hbp,
         const vec<pair<int,Bool>>& hbp_to_hb,
         map<Variant, vec<pair<int,int>>> *p_var_friending)
 {
@@ -562,11 +562,11 @@ void EdgesOnRef::UnrollAll(const int verbosity, const int iLoBound, const int iH
 
         int new_edge0 = -1;
         double best_match_rate = 0.0;
-        align a;
+        ::align a;
         vec<pair<double,int>> alt_edges;
         for (int i = 0; i < hb_.FromSize(to_right[tail_edge0]); i++) {
             int eid = hb_.EdgeObjectIndexByIndexFrom(to_right[tail_edge0], i);
-            align ai;
+            ::align ai;
             int Bandwidth = max(1, (int)hb_.EdgeObject(eid).size()/2);
             RestrictedAlign(hb_.EdgeObject(eid), gplus_, tail_edge_end,
                     Bandwidth, ai );
@@ -630,11 +630,11 @@ void EdgesOnRef::UnrollAll(const int verbosity, const int iLoBound, const int iH
 
         int new_edge0 = -1; 
         double best_match_rate = 0.0;
-        align a;
+        ::align a;
         vec<pair<double,int>> alt_edges;
         for (int i = 0; i < hb_.ToSize(to_left[head_edge0]); i++) {
             int eid = hb_.EdgeObjectIndexByIndexTo(to_left[head_edge0], i);
-            align ai;
+            ::align ai;
             int Bandwidth = max(1, (int)hb_.EdgeObject(eid).size()/2);
             int start_prev = start0 - hb_.EdgeLengthKmers(eid);
             RestrictedAlign(hb_.EdgeObject(eid), gplus_, start_prev, Bandwidth, ai);
@@ -1380,7 +1380,7 @@ void EdgesOnRef::AddConnections(int front_edge, int back_edge, const vec<pair<in
 // Also report the alignment of these edges, which are used to find friend
 // locations.
 void EdgesOnRef::CallVariantsGroupedWithProb(int gid, vec<VariantCallGroup> *p_groups, 
-        vec<align>* p_edge_aligns, int verbosity) 
+        vec<::align>* p_edge_aligns, int verbosity) 
 {
     if (verbosity >=1) cout << Date() << ": Start calling variants" << endl;
     // identify anchoring edges from bubble graph
@@ -1403,7 +1403,7 @@ void EdgesOnRef::CallVariantsGroupedWithProb(int gid, vec<VariantCallGroup> *p_g
 
     // to be calculated 
     vec<VariantCallGroup> all_groups(ngroups);
-    vec<align>   align_all_edges(nedges);
+    vec<::align>   align_all_edges(nedges);
     for (size_t i = 0; i < anchoring_edges.size(); i++) {
         int e = anchoring_edges[i];
         const vec<int>& path = bubble_graph_edge_path_[e];
@@ -1419,7 +1419,7 @@ void EdgesOnRef::CallVariantsGroupedWithProb(int gid, vec<VariantCallGroup> *p_g
                 edge_seq.size() - trim_start - trim_end);
         int path_offset = GetStart(path.front()) + trim_start;
 
-        align a;
+        ::align a;
         int bandwidth = max(1, (int)edge_seq.size() /2 );
 
         RestrictedAlign( edge_seq, gplus_, path_offset, bandwidth, a );
@@ -1534,7 +1534,7 @@ void EdgesOnRef::CallVariantsGroupedWithProb(int gid, vec<VariantCallGroup> *p_g
             align a = align(al);
             */
 
-            align a;
+            ::align a;
             int n1 = branch_base.size( ), n2 = cell_ref.size( );
             int offset = (-n1+n2)/2;
             int bandwidth = Max( offset + n1, n2 - offset );
@@ -1555,7 +1555,7 @@ void EdgesOnRef::CallVariantsGroupedWithProb(int gid, vec<VariantCallGroup> *p_g
             if ( !left_ok || !right_ok )
             {    alignment al;
                  SmithWatAffine(branch_base, cell_ref, al, true, true);
-                 a = align(al);    }
+                 a = ::align(al);    }
 
             if (verbosity >= 2) {
                 cout << "align branch"  << j << " [" <<  a.pos1() << "," << a.Pos1() 
@@ -1649,7 +1649,7 @@ void EdgesOnRef::MakeBubbleGraph(int verbosity)
     if (verbosity >=1)
         cout << Date() << ": Make bubble graph" << endl;
     vec<vec<int>> single_edges;
-    vec<align> single_edges_aligns;
+    vec<::align> single_edges_aligns;
     FindAnchoringEdges(single_edges);
     AlignAnchoringEdges(single_edges, single_edges_aligns, verbosity);
     if (verbosity >=2)
@@ -1868,8 +1868,9 @@ void EdgesOnRef::FilterAndModifyEdits( vec<triple<int,int,String>>& edits,
         bool i_is_indel = (change[i].first.size() != change[i].second.size());
         if (i_is_indel) inserted_base += change[i].second.size()-1;
         size_t j = i + 1;
-        while (j < edits.size() && abs(edits[j].second - edits[j-1].second 
-                    - change[j-1].first.size()) < MinClumpSep) {
+        while (j < edits.size() && std::abs( longlong(
+                    edits[j].second - edits[j-1].second
+                    - change[j-1].first.size()) ) < MinClumpSep) {
             nmatch += edits[j].second - edits[j-1].second - change[j-1].first.size();
             bool j_is_indel = (change[j].first.size() != change[j].second.size());
             if (j_is_indel) 
@@ -1939,7 +1940,7 @@ void EdgesOnRef::FindAnchoringEdges(vec<vec<int>>& single_edges) const
 // Remove short edges. Also remove edges that cannot be anchored in reference,
 // which are probably due to large insertions.
 void EdgesOnRef::AlignAnchoringEdges(vec<vec<int>>& single_edges,
-        vec<align>& single_edge_aligns, int verbosity) 
+        vec<::align>& single_edge_aligns, int verbosity) 
 {
     vec<int> to_right2; dg_.ToRight(to_right2);
     vec<int> to_left2; dg_.ToLeft(to_left2);
@@ -1971,7 +1972,7 @@ void EdgesOnRef::AlignAnchoringEdges(vec<vec<int>>& single_edges,
             // make the alignment
             basevector edge_trimmed(edge.begin()+trim_left, 
                     edge.end() - trim_right);
-            align a;
+            ::align a;
 
             int bandwidth = max(1, (int)edge_trimmed.size() /2 );
             int path_offset = GetStart(path.front()) + trim_left;

@@ -173,3 +173,14 @@ void ProcessFrequentKmers( vec<bvec const*> const& EE,
 
 FOR_ALL_K(INSTANTIATE_PROCESS_FREQUENT_KMERS, 1);
 FOR_ALL_K(INSTANTIATE_PROCESS_FREQUENT_KMERS, 2);
+
+// Explicitly instantiate the underlying vec<bvec const*> overload too:
+// modern GCC does not implicitly emit it from the wrapper instantiation
+// above, and MakeAligns.o references it externally.
+#define INSTANTIATE_PROCESS_FREQUENT_KMERS_BP(K,I )                              \
+     template void ProcessFrequentKmers<I, K>(                                  \
+     vec<bvec const*> const& EE, vec< kmer_record<K,I> > R, unsigned int S,      \
+     int max_clique, String run_dir )
+
+FOR_ALL_K(INSTANTIATE_PROCESS_FREQUENT_KMERS_BP, 1);
+FOR_ALL_K(INSTANTIATE_PROCESS_FREQUENT_KMERS_BP, 2);

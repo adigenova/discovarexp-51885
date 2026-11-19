@@ -51,7 +51,7 @@ GenAlignments(
   ostream& aligns_out = *s;
 
   vec< mutmer_read_idX<I> > mid(Max(M.Counts()));
-  vec<align> aligns(max_alignments);
+  vec<::align> aligns(max_alignments);
   vec<int> errors(max_alignments);
 
   int aligns_length, j;

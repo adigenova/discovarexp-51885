@@ -202,11 +202,16 @@ class efasta : public String {
       friend void WriteScaffoldedEFasta( const String &out_file,
 					const VecEFasta &fasta,
 					const vec<superb> &scaffolds,
-					const Bool ncbi_format = False);
+					const Bool ncbi_format);
 
       friend void swap( efasta& e1, efasta& e2 )
       { e1.swap(e2); }
 };
+
+// Free declaration carrying the default argument (the friend
+// declaration above must not specify it under GCC 14+).
+void WriteScaffoldedEFasta( const String &out_file, const VecEFasta &fasta,
+     const vec<superb> &scaffolds, const Bool ncbi_format = False);
 
 template<> struct Serializability<efasta>
 { typedef SelfSerializable type; };

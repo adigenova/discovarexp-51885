@@ -46,7 +46,7 @@ namespace { // open anonymous namespace
 int PenaltyFunc( const int e, const int g, const int d )
 {    return 3*e + 100*g + d;    }
 
-vec<pair<int,edit0>> AlignToEdits(const align& a, const basevector& aSeq,
+vec<pair<int,edit0>> AlignToEdits(const ::align& a, const basevector& aSeq,
         const basevector& rSeq, N50Calculator* pN50Calc )
 {
     vec<pair<int,edit0>> edits;
@@ -97,7 +97,7 @@ vec<pair<int,edit0>> AlignToEdits(const align& a, const basevector& aSeq,
 }
 
 vec< std::tuple<int64_t,int64_t,int64_t,int64_t,int64_t> >
-PerfectMatch(const align&a, const basevector&S,const basevector&T){
+PerfectMatch(const ::align&a, const basevector&S,const basevector&T){
     vec< std::tuple<int64_t,int64_t,int64_t,int64_t,int64_t> > out;
     int p1 = a.pos1( ), p2 = a.pos2( );
 
@@ -153,7 +153,7 @@ unsigned int SmithWatAffineWrapper(const basevector & S, const basevector & T,
 };
 // Find the best alignment between the assembly sequence and reference.
 // Right now the slow SmithWatAffineParallel is the bottle neck.
-align BestAlign(const basevector& b1, const basevector& b2, ostream& out, int iAlignerK)
+::align BestAlign(const basevector& b1, const basevector& b2, ostream& out, int iAlignerK)
 {
     alignment al;
     double tclock = WallClockTime( );
@@ -172,7 +172,7 @@ align BestAlign(const basevector& b1, const basevector& b2, ostream& out, int iA
         // std::cout << "SmithWatAffineSuper at K=" << iAlignerK << " ran for " << TimeSince(tclock)<< std::endl;
         break;
     }
-    align a(al);
+    ::align a(al);
     out << "Alignment of best path sequences [" << a.pos1() << ", " << a.Pos1()
         << " (len=" << b1.size() << ")"
         << ") to reference [" << a.pos2() << ", " << a.Pos2() << ")"
@@ -187,7 +187,7 @@ align BestAlign(const basevector& b1, const basevector& b2, ostream& out, int iA
 // basically, use the information in coors_hbp to find an underlying edge sequence to "split" the alignment problem
 // right in the middle. This removes duplicated kmers when the reference is doubled, and will work
 // as long as the underlying aligner works with the original, undoubled reference
-align BestAlignForDoubled(const basevector& b1, const basevector& b2
+::align BestAlignForDoubled(const basevector& b1, const basevector& b2
                          , const vec<std::tuple<int64_t,int64_t,int,int64_t,int64_t,int64_t,int64_t>>& coors_hbp
                          , ostream& out)
 {
@@ -200,7 +200,7 @@ align BestAlignForDoubled(const basevector& b1, const basevector& b2
     ForceAssert(max_range%2==0);
     int64_t range = max_range/2;
 
-    align output;
+    ::align output;
     if( e1_2-b1_2 < range+1000){
 //        std::cout << "ForDoubled: less than half-filled, shrinking" << std::endl;
         int64_t padding = (range-e1_2+b1_2)/2;
@@ -209,7 +209,7 @@ align BestAlignForDoubled(const basevector& b1, const basevector& b2
         int64_t e2_2 = min(max_range,e1_2+padding);
         alignment al;
         SmithWatAffineWrapper( b1, basevector(b2.begin()+b2_2,b2.begin()+e2_2), al, False, False );
-        output=align(al);
+        output=::align(al);
         output.Setpos2(output.pos2()+b2_2);
     }
     else{
@@ -248,7 +248,7 @@ align BestAlignForDoubled(const basevector& b1, const basevector& b2
             SmithWatAffineWrapper( b1_sub, b2_sub, al_sub, False, False);
             if(    al_sub.StartOnQuery()==0 && al_sub.EndOnQuery()==ee_1-be_1){
 //std::cout << "fully aligned" << std::endl;
-                align a_sub(al_sub);
+                ::align a_sub(al_sub);
                 vec< std::tuple<int64_t,int64_t,int64_t,int64_t,int64_t> > pms=PerfectMatch(al_sub, b1_sub,b2_sub);
                 std::sort(pms.rbegin(),pms.rend());
 //PRINT(pms.size());
@@ -349,7 +349,7 @@ align BestAlignForDoubled(const basevector& b1, const basevector& b2
         if(!bAligned){
             alignment al;
             SmithWatAffineWrapper( b1, b2, al, False, False );
-            output=align(al);
+            output=::align(al);
         }
     }
 
@@ -394,7 +394,7 @@ void PrintPath(const vec<int>& path, const vec<pair<int,Bool>>& hbp_to_hb,
 }
 
 // From the alignment, accumulate assembly error stats.
-void AddErrors(const align& a, const basevector& aSeq, const basevector& rSeq,
+void AddErrors(const ::align& a, const basevector& aSeq, const basevector& rSeq,
                     N50Calculator* pN50Calc, AssemblyError::err_per_ref& res)
 {
     for(const auto& edit: AlignToEdits(a,aSeq,rSeq,pN50Calc))
@@ -1409,7 +1409,7 @@ AssemblyError EvalAssemblyCore( const ref_data& ref, const HyperBasevector& hb,
         vec<std::tuple<int64_t,int64_t,int,int64_t,int64_t,int64_t,int64_t>> coors_hbp;
         if(!linear_ref.IsDoubled(g)) // if reference is not doubled, due to circular reference
         {
-            vec<align> aligns(path_segs.size());
+            vec<::align> aligns(path_segs.size());
             for (size_t i = 0; i < path_segs.size(); i++) {
                 out << "segment " << i << ": ";
                 PrintPath(path_segs[i], hbp_to_hb, out);
@@ -1454,7 +1454,7 @@ AssemblyError EvalAssemblyCore( const ref_data& ref, const HyperBasevector& hb,
                 }
                 coors_hbp.append(coors_hbp_loc);
             }
-            align alignment = BestAlignForDoubled(full_seq, edge_placements.G[g], coors_hbp,out);
+            ::align alignment = BestAlignForDoubled(full_seq, edge_placements.G[g], coors_hbp,out);
 //std::cout << "new alignmet" << std::endl;
 //PrintVisualAlignmentClean(True, cout, full_seq, edge_placements.G[g], alignment);
 //std::cout << "new alignmet end" << std::endl;

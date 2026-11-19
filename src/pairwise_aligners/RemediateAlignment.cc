@@ -19,7 +19,7 @@
 #include "Vec.h"
 
 Bool RemediateAlignment( const basevector& rd1, const qualvector& q1,
-     const basevector& rd2, const qualvector& q2, align& a, int& errors, 
+     const basevector& rd2, const qualvector& q2, ::align& a, int& errors, 
      float& score )
 {    if ( a.Nblocks( ) == 1 && errors < 10 ) return false;
      int pos1 = a.pos1( ), pos2 = a.pos2( );

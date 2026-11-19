@@ -31,7 +31,7 @@
 // If RC = True, then the alignment is between rc(the first sequence) and the
 // second sequence.
 
-void TrimAlignmentEnds( align& a, Bool RC, const basevector &read, 
+void TrimAlignmentEnds( ::align& a, Bool RC, const basevector &read, 
      const basevector& contig, Bool trim_begin, Bool trim_end, int par1, int par2,
      int par3 )
 {

@@ -137,7 +137,7 @@ packalign::packalign( int pos1, int pos2,
 
 }
 
-packalign::packalign( const align& a )
+packalign::packalign( const ::align& a )
 {
   ConstructorCore( a.pos1( ), a.pos2( ), a.Gaps( ), a.Lengths( ), 
                    a.Nblocks( ) );    
@@ -544,28 +544,28 @@ Bool packalign::Dead( ) const
 
 int packalign::pos1( ) const
 {
-  align a;
+  ::align a;
   a.UnpackFrom(*this);
   return a.pos1( );    
 }
 
 int packalign::pos2( ) const
 {
-  align a;
+  ::align a;
   a.UnpackFrom(*this);
   return a.pos2( );    
 }
 
 int packalign::Pos1( ) const
 {
-  align a;
+  ::align a;
   a.UnpackFrom(*this);
   return a.Pos1( );    
 }
 
 int packalign::Pos2( ) const
 {
-  align a;
+  ::align a;
   a.UnpackFrom(*this);
   return a.Pos2( );    
 }
@@ -637,7 +637,7 @@ void packalign::SetToFlipOf( const packalign& p )
   Set( pos2, pos1, gaps, lengths );    
 }
 
-void packalign::SetToFlipOf( align a )
+void packalign::SetToFlipOf( ::align a )
 {
   for ( int i = 0; i < a.Nblocks( ); i++ )
     a.SetGap( i, -a.Gaps(i) );
@@ -685,7 +685,7 @@ void packalign::SetToReverseFlipOf( const packalign& p, int b1_len, int b2_len )
   Set( b1_len - Pos1, b2_len - Pos2, gaps_new, lengths_new );    
 }
 
-void packalign::SetToReverseFlipOf( align a, int b1_len, int b2_len )
+void packalign::SetToReverseFlipOf( ::align a, int b1_len, int b2_len )
 {
   int pos1 = a.pos2( ), pos2 = a.pos1( );
   for ( int i = 0; i < a.Nblocks( ); i++ )
@@ -934,7 +934,7 @@ void align::UnpackFrom( const packalign& p )
 // Proper tests an align to see if it is proper.  It does not flag "dead"
 // alignments, those with no gaps or lengths.
 
-Bool Proper( const align& a, int len1, int len2 )
+Bool Proper( const ::align& a, int len1, int len2 )
 {
   if ( a.Nblocks( ) == 0 ) return True;
   int pos1 = a.pos1( ), pos2 = a.pos2( ), Pos1 = a.Pos1( ), Pos2 = a.Pos2( );
@@ -957,7 +957,7 @@ Bool Proper( const align& a, int len1, int len2 )
 // RequireProper tests an alignment_plus to see if it is proper.  It does not
 // object to "dead" alignments, those with no gaps or lengths.
 
-void RequireProper( const align& a, int id1, int id2, Bool rc2, 
+void RequireProper( const ::align& a, int id1, int id2, Bool rc2, 
                     const vecbasevector& EE, int test_no, Bool fatal )
 {
   if ( Proper( a, EE[id1].size( ), EE[id2].size( ) ) ) return;
@@ -981,7 +981,7 @@ void RequireProper( const align& a, int id1, int id2, Bool rc2,
   if (fatal) ForceAssert( 0 == 1 );    
 }
 
-void RequireProper( const align& a, int id1, int id2, Bool rc2, 
+void RequireProper( const ::align& a, int id1, int id2, Bool rc2, 
                     const vec<int>& EE_length, int test_no, Bool fatal )
 {
   if ( Proper( a, EE_length[id1], EE_length[id2] ) ) return;
@@ -998,7 +998,7 @@ void RequireProper( const align& a, int id1, int id2, Bool rc2,
 }
 
 int ActualErrors( const basevector& rd1, const basevector& rd2, 
-                  const align& a, int mismatch_penalty, int gap_penalty )
+                  const ::align& a, int mismatch_penalty, int gap_penalty )
 {    int p1 = a.pos1( ), p2 = a.pos2( ), answer = 0;
      for ( int j = 0; j < a.Nblocks( ); j++ )
      {    if ( a.Gaps(j) > 0 )
@@ -1013,7 +1013,7 @@ int ActualErrors( const basevector& rd1, const basevector& rd2,
      return answer;    }
 
 int ActualErrors( const vec<char>& rd1, const basevector& rd2, 
-                  const align& a, int mismatch_penalty, int gap_penalty )
+                  const ::align& a, int mismatch_penalty, int gap_penalty )
 {    int p1 = a.pos1( ), p2 = a.pos2( ), answer = 0;
      for ( int j = 0; j < a.Nblocks( ); j++ )
      {    if ( a.Gaps(j) > 0 )
@@ -1029,7 +1029,7 @@ int ActualErrors( const vec<char>& rd1, const basevector& rd2,
      return answer;    }
 
 int ActualErrors( const fastavector& rd1, const basevector& rd2, 
-                  const align& a, int mismatch_penalty, int gap_penalty )
+                  const ::align& a, int mismatch_penalty, int gap_penalty )
 {    int p1 = a.pos1( ), p2 = a.pos2( ), answer = 0;
      for ( int j = 0; j < a.Nblocks( ); j++ )
      {    if ( a.Gaps(j) > 0 )
@@ -1046,7 +1046,7 @@ int ActualErrors( const fastavector& rd1, const basevector& rd2,
      return answer;    }
 
 int ActualErrors( const fastavector& rd1, const fastavector& rd2, 
-                  const align& a, int mismatch_penalty, int gap_penalty )
+                  const ::align& a, int mismatch_penalty, int gap_penalty )
 {    int p1 = a.pos1( ), p2 = a.pos2( ), answer = 0;
      for ( int j = 0; j < a.Nblocks( ); j++ )
      {    if ( a.Gaps(j) > 0 )
@@ -1063,7 +1063,7 @@ int ActualErrors( const fastavector& rd1, const fastavector& rd2,
      return answer;    }
 
 int ActualErrorsRc( const basevector& rd1, const basevector& rd2, 
-                    const align& a, int mismatch_penalty, int gap_penalty )
+                    const ::align& a, int mismatch_penalty, int gap_penalty )
 {    int n2 = rd2.size( );
      int p1 = a.pos1( ), p2 = a.pos2( ), answer = 0;
      for ( int j = 0; j < a.Nblocks( ); j++ )
@@ -1079,7 +1079,7 @@ int ActualErrorsRc( const basevector& rd1, const basevector& rd2,
      return answer;    }
 
 int ActualErrorsRc( const fastavector& rd1, const basevector& rd2, 
-                    const align& a, int mismatch_penalty, int gap_penalty )
+                    const ::align& a, int mismatch_penalty, int gap_penalty )
 {    int n2 = rd2.size( );
      int p1 = a.pos1( ), p2 = a.pos2( ), answer = 0;
      for ( int j = 0; j < a.Nblocks( ); j++ )
@@ -1097,7 +1097,7 @@ int ActualErrorsRc( const fastavector& rd1, const basevector& rd2,
      return answer;    }
 
 int ActualErrorsRc( const fastavector& rd1, const fastavector& rd2, 
-                    const align& a, int mismatch_penalty, int gap_penalty )
+                    const ::align& a, int mismatch_penalty, int gap_penalty )
 {    int n2 = rd2.size( );
      int p1 = a.pos1( ), p2 = a.pos2( ), answer = 0;
      for ( int j = 0; j < a.Nblocks( ); j++ )
@@ -1116,20 +1116,20 @@ int ActualErrorsRc( const fastavector& rd1, const fastavector& rd2,
 
 template<class BASEVEC1, class BASEVEC2>
 int ActualErrors( Bool rc, const BASEVEC1& rd1, const BASEVEC2& rd2, 
-                  const align& a, int mismatch_penalty, int gap_penalty )
+                  const ::align& a, int mismatch_penalty, int gap_penalty )
 {
   if ( !rc ) return ActualErrors( rd1, rd2, a, mismatch_penalty, gap_penalty );
   else return ActualErrorsRc( rd1, rd2, a, mismatch_penalty, gap_penalty );    
 }
 
 template int ActualErrors( Bool rc, const basevector& rd1, const basevector& rd2, 
-                  const align& a, int mismatch_penalty, int gap_penalty );
+                  const ::align& a, int mismatch_penalty, int gap_penalty );
 template int ActualErrors( Bool rc, const fastavector& rd1, const basevector& rd2, 
-                  const align& a, int mismatch_penalty, int gap_penalty );
+                  const ::align& a, int mismatch_penalty, int gap_penalty );
 template int ActualErrors( Bool rc, const fastavector& rd1, const fastavector& rd2, 
-                  const align& a, int mismatch_penalty, int gap_penalty );
+                  const ::align& a, int mismatch_penalty, int gap_penalty );
 
-int Bandwidth( align& a )
+int Bandwidth( ::align& a )
 {
   const int add_to_bandwidth = 8; // heuristic
   int low = 0, high = 0, gap_total = 0;
@@ -1164,7 +1164,7 @@ void align::Read( istream& in, int& errors, int& id1, int& id2, Bool& rc )
   BinRead( in, rc );    
 }
 
-int CorrelatePositions( const align& a, int x1 )
+int CorrelatePositions( const ::align& a, int x1 )
 {
   int pos1 = a.pos1( ), pos2 = a.pos2( );
   if ( x1 < pos1 ) return OffTheEnd;
@@ -1239,7 +1239,7 @@ void align::Flip( )
 }
 
 
-align align::TrimmedTo1(const int start, const int len) const {
+::align align::TrimmedTo1(const int start, const int len) const {
   //make sure start and end are sensible!
   int endOn1 = start + len;
   int startOn1 = start;
@@ -1355,8 +1355,8 @@ align align::TrimmedTo1(const int start, const int len) const {
 }  
 
 void Trim1Together(const basevector & b1, const basevector & b2, 
-		   const align & a, int startOn1, int len, 
-		   basevector & trimmedb1, align & trimmeda) {
+		   const ::align & a, int startOn1, int len, 
+		   basevector & trimmedb1, ::align & trimmeda) {
   trimmeda = a.TrimmedTo1(startOn1, len);
   trimmedb1.SetToSubOf(b1, startOn1, len);
 }
@@ -1908,7 +1908,7 @@ void align::readBinary( BinaryReader& reader )
     reader.read(lengths_.x,lengths_.x+nblocks_);
 }
 
-ostream & operator<<(ostream & os, const align & a) {
+ostream & operator<<(ostream & os, const ::align & a) {
   os << "startOn1: " << a.pos1() << ", startOn2: " << a.pos2()
      << ", Nblocks: " << a.Nblocks() << endl;
   return os;

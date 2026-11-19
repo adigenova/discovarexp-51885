@@ -92,7 +92,7 @@ class look_align {
   int nhits;
   nmuts_t mutations;
   int indels;
-  align a;
+  ::align a;
   Bool rc1;
 
   look_align( )
@@ -111,7 +111,7 @@ class look_align {
 	      unsigned int query_length_arg,
 	      unsigned int target_length_arg,
 	      Bool rc1_arg,
-	      const align& a_arg,
+	      const ::align& a_arg,
 	      int nhits_arg,
 	      nmuts_t mutations_arg,
 	      int indels_arg )
@@ -128,7 +128,7 @@ class look_align {
 
   /// Reset the align, mutations and indels parameters, keep
   /// the original target and query info.
-  void ResetFromAlign(const align & a, const basevector &b1,
+  void ResetFromAlign(const ::align & a, const basevector &b1,
 		      const basevector &b2);
 
   // Copy some member functions for align a.

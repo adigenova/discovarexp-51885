@@ -239,11 +239,11 @@ class superb {
      // write the files  mergedcontigs.superb and mergedcontigs.summary
      friend void WriteSuperbsAndSummary( const String & dir,
 					 const vec<superb> & s,
-					 Bool index_only = False,
-                                         const String& base = "mergedcontigs" );
+					 Bool index_only,
+                                         const String& base );
 
      friend void WriteSummary( const String & fn, const vec<superb> & s, 
-			       const vecBoolvector& s_rc = vecBoolvector() );
+			       const vecBoolvector& s_rc );
 
      // WriteSupercontigFiles: write all the supercontig assembly files.  These are
      // mergedcontigs.superb, mergedcontigs.summary, and mergedcontigs.answer.gz.
@@ -251,7 +251,7 @@ class superb {
 
      friend void WriteSupercontigFiles( const String& dir,
 					const vec<superb>& s,
-					Bool index_only = False );
+					Bool index_only );
 
      // Two supercontigs are declared abstractly equal if they have the same contig
      // sizes in the same or reverse order, with the same gaps and deviations.
@@ -270,6 +270,17 @@ class superb {
      vec<gapb> gap_;
 
 };
+
+// Free declarations carrying the default arguments: a friend declaration
+// that is not a definition may no longer specify default arguments
+// (GCC 14+), so the defaults live here instead of in the friend
+// declarations above.
+void WriteSuperbsAndSummary( const String & dir, const vec<superb> & s,
+     Bool index_only = False, const String& base = "mergedcontigs" );
+void WriteSummary( const String & fn, const vec<superb> & s,
+     const vecBoolvector& s_rc = vecBoolvector() );
+void WriteSupercontigFiles( const String& dir, const vec<superb> & s,
+     Bool index_only = False );
 
 class superb_by_tig {
 

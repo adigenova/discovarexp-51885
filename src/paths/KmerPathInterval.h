@@ -287,6 +287,14 @@ SemanticTypeStd( longlong, path_interval_id_t );
    Models <tagged read path interval>.
 */
 // TODO: potentially dangerous truncation of index by PathId, ReadId
+// Free declarations carrying the default arguments for the
+// Contains templates: the repeated friend declarations in the
+// database classes below must not specify them (GCC 14+).
+template<class TAG> void Contains( const vec<TAG>& segs, kmer_id_t index,
+     vec<longlong>& answer, bool append = false, int cap = -1 );
+template<class TAG> void Contains( const vec<TAG>& segs, KmerPathInterval rpi,
+     vec<longlong>& answer, bool append = false, int cap = -1 );
+
 class tagged_rpint {
 
      public: /* PUBLIC METHODS */
@@ -364,11 +372,11 @@ class tagged_rpint {
 
      template<class TAG>
      friend void Contains( const vec<TAG>& segs, kmer_id_t index,
-          vec<longlong>& answer, bool append = false, int cap = -1 );
+          vec<longlong>& answer, bool append, int cap );
 
      template<class TAG>
      friend void Contains( const vec<TAG>& segs, KmerPathInterval rpi,
-          vec<longlong>& answer, bool append = false, int cap = -1 );
+          vec<longlong>& answer, bool append, int cap );
 
      template<class TAG>
      friend longlong Instance( const vec<TAG>& segs, kmer_id_t k );
@@ -491,11 +499,11 @@ class big_tagged_rpint {
 
      template<class TAG>
      friend void Contains( const vec<TAG>& segs, kmer_id_t index,
-          vec<longlong>& answer, bool append = false, int cap = -1 );
+          vec<longlong>& answer, bool append, int cap );
 
      template<class TAG>
      friend void Contains( const vec<TAG>& segs, KmerPathInterval rpi,
-          vec<longlong>& answer, bool append = false, int cap = -1 );
+          vec<longlong>& answer, bool append, int cap );
 
      template<class TAG>
      friend longlong Instance( const vec<TAG>& segs, kmer_id_t k );
@@ -622,11 +630,11 @@ class new_tagged_rpint {
 
      template<class TAG>
      friend void Contains( const vec<TAG>& segs, kmer_id_t index,
-          vec<longlong>& answer, bool append = false, int cap = -1 );
+          vec<longlong>& answer, bool append, int cap );
 
      template<class TAG>
      friend void Contains( const vec<TAG>& segs, KmerPathInterval rpi,
-          vec<longlong>& answer, bool append = false, int cap = -1 );
+          vec<longlong>& answer, bool append, int cap );
 
      template<class TAG>
      friend kmer_id_t Instance( const vec<TAG>& segs, kmer_id_t k );
@@ -681,6 +689,7 @@ TRIVIALLY_SERIALIZABLE(new_tagged_rpint);
 //    path interval - See <KmerPathInterval>
 //    interval - See <KmerPathInterval>
 //    kmer range - See <KmerPathInterval>
+
 
 
 

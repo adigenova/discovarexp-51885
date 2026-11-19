@@ -504,7 +504,7 @@ template<int L> void ImprovePath( const vec< pair<int64_t, pair<int,int> > >& lo
           {    basevector E = hb.Cat(core);
                avector<int> gaps(1), lengths(1);
                gaps(0) = 0, lengths(0) = b.size( );
-               align a( 0, starts[0], gaps, lengths );
+               ::align a( 0, starts[0], gaps, lengths );
                PrintVisualAlignment( True, *pout, b, E, a, q );    }    }
      FinalPrint(pout);    }
 

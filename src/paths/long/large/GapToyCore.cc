@@ -857,8 +857,20 @@ int GapToyCore( int argc, char *argv[] )
                PRINT(checksum_60);
 
                quals.unload();
+               // M2 (docs/GraphConstruction.md, section 7): Repath does not
+               // use the reads, but the K=200 kmer dictionary is at its
+               // largest while Repath runs.  Free the reads here and
+               // reload them from data/frag_reads_orig.fastb (the same
+               // file the CACHE path reloads from) before Clean200.
+               {    vecbvec empty; bases.swap(empty);    }
                Repath( hbv, edges, inv, paths, hbv.K(), 200, 
                     run_head+".200", True, True, EXTEND_PATHS );    }
+
+          // Reload reads.  (M2)
+
+          {    double bclock = WallClockTime( );
+               bases.ReadAll(tmp_dir1 + "/frag_reads_orig.fastb");
+               cout << TimeSince(bclock) << " used reloading reads" << endl; }
 
           // Clean.
 

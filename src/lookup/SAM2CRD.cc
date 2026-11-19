@@ -62,15 +62,16 @@ typedef pair<uint,uint> IdMapVal; // readId, libId
 
 struct IdMapKeyComp
 {
-    bool operator()( IdMapKey const& key1, IdMapKey const& key2 )
+    bool operator()( IdMapKey const& key1, IdMapKey const& key2 ) const
     {
         int strOrder = strcmp(key1.first,key2.first);
         return strOrder < 0 || strOrder == 0 && key1.second < key2.second;
     }
 };
 
-typedef MempoolOwner< pair<IdMapKey const,IdMapVal> > IdMapAllocator;
-typedef map<IdMapKey,IdMapVal,IdMapKeyComp,IdMapAllocator> IdMap;
+// The old MempoolOwner allocator here does not satisfy C++11
+// std::allocator_traits rebind requirements; use a plain map.
+typedef map<IdMapKey,IdMapVal,IdMapKeyComp> IdMap;
 
 
 }
@@ -131,9 +132,8 @@ void SAM2CRD( SAMFile& sf,
 
     uint nextReadId = seqs.size();
 
-    IdMapAllocator alloc;
     IdMapKeyComp comp;
-    IdMap idMap(comp,alloc);
+    IdMap idMap(comp);
     map<string,uint> libNameToLibId;
 
     IdMap::const_iterator pos;
@@ -230,7 +230,7 @@ void SAM2CRD( SAMFile& sf,
             continue; // NON-STRUCTURED CODE!
         }
 
-        align laAln;
+        ::align laAln;
         Convert_Alignment_to_align( aln, laAln );
         uint nIndels = 0;
         for ( int i = 0; i < laAln.Nblocks( ); i++ )
@@ -303,7 +303,7 @@ void SAM2CRD( SAMFile& sf,
     idMap.clear();
 }
 
-void Convert_Alignment_to_align( const Alignment& aln, align& a )
+void Convert_Alignment_to_align( const Alignment& aln, ::align& a )
 {    avector<int> gaps, lengths;
      bool expectPairwise = false;
      Block const* end = aln.end();

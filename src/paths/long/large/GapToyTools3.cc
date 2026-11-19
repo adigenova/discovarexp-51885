@@ -299,7 +299,7 @@ void SelectSpecials( const HyperBasevector& hb, vecbasevector& bases,
                gaps(0) = 0;
                lengths(0) 
                     = IntervalOverlap( 0, b1.isize( ), offset, offset + b2.isize( ) );
-               align a( pos1, pos2, gaps, lengths );
+               ::align a( pos1, pos2, gaps, lengths );
                PrintVisualAlignment( True, cout, b1, b2, a, q1, q2 );    }    }
 
      int64_t total_friends = 0;

@@ -30,6 +30,7 @@ void buildBigKHBVFromReads( unsigned K, vecbvec const& reads, unsigned coverage,
                                 HyperBasevector* pHBV,
                                 ReadPathVec* pReadPaths=nullptr,
                                 HyperKmerPath* pHKP=nullptr,
-                                vecKmerPath* pKmerPaths=nullptr );
+                                vecKmerPath* pKmerPaths=nullptr,
+                                size_t dictSize=0 );
 
 #endif /* BIGKPATHER_H_ */

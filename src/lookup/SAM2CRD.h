@@ -219,7 +219,7 @@ public:
             unsigned int query_length,
             unsigned int target_length,
             Bool rc1,
-            const align& aln,
+            const ::align& aln,
             int nhits,
             nmuts_t mutations,
             int indels,
@@ -267,6 +267,6 @@ void SAM2CRD( SAM::SAMFile& sf, // sam input file
 
 /* DO NOT ADD "using namespace SAM;" HERE, PUT IT IN YOUR .CC FILE. */
 
-void Convert_Alignment_to_align( const SAM::Alignment& aln, align& a );
+void Convert_Alignment_to_align( const SAM::Alignment& aln, ::align& a );
 
 #endif /* LOOKUP_SAM2CRD_H_ */

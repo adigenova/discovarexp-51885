@@ -42,7 +42,7 @@ void CountNQS(
      /* outputs: */        int& look, int& see );
 
 void CountNQS(
-     /* inputs: */         const align& a,
+     /* inputs: */         const ::align& a,
                            const basevector& rd1, const basevector& rd2,
                            const qualvector& q1, const qualvector& q2,
      /* heuristics: */     int NQS_floor1, int NQS_floor2, int NQS_extra,
@@ -51,7 +51,7 @@ void CountNQS(
                            const bitvector& restricted_to2 = bitvector( ) );
 
 void CountNQS( 
-     /* inputs: */         const align& a, 
+     /* inputs: */         const ::align& a, 
                            const basevector& rd1, const basevector& rd2, 
      /* heuristics: */     int NQS_extra,
      /* outputs: */        int& look, int& see,

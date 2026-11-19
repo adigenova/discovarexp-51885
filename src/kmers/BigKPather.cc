@@ -447,7 +447,7 @@ void ValidatePaths( vecbvec const& reads, ReadPathVec const& readPaths,
 #endif
 
 template <unsigned BIGK>
-void readsToHBV( vecbvec const& reads, unsigned coverage,
+void readsToHBV( vecbvec const& reads, unsigned coverage, size_t dictSize,
                     HyperBasevector* pHBV, ReadPathVec* pReadPaths,
                     HyperKmerPath* pHKP, vecKmerPath* pKmerPaths )
 {
@@ -470,7 +470,16 @@ void readsToHBV( vecbvec const& reads, unsigned coverage,
         return;
     }
 
-    BigDict<BIGK> bigDict(nKmers/coverage);
+    // M1 (docs/GraphConstruction.md, section 7): if a dictionary-size hint
+    // was supplied, use it -- the hint estimates the number of *distinct*
+    // kmers, which is all the dictionary can ever hold.  The legacy
+    // sizing nKmers/coverage is based on the total kmer-instance count
+    // and overshoots by the redundancy of the input.  An undersized hint
+    // is safe (the hash set grows by splitting) but costs rehashing.
+    size_t dictSizeToUse = dictSize ?
+        ( dictSize < nKmers ? dictSize : nKmers ) : nKmers/coverage;
+    if ( !dictSizeToUse ) dictSizeToUse = 1;
+    BigDict<BIGK> bigDict(dictSizeToUse);
     BigKMerizer<BIGK> kmerizer(&bigDict);
     parallelFor(0ul,reads.size(),
             [kmerizer,&reads]( size_t readId ) mutable
@@ -510,18 +519,19 @@ void readsToHBV( vecbvec const& reads, unsigned coverage,
 template <int BIGK>
 struct SillyFunctor
 {
-    void operator()( vecbvec const& reads, unsigned coverage,
+    void operator()( vecbvec const& reads, unsigned coverage, size_t dictSize,
             HyperBasevector* pHBV, ReadPathVec* pReadPaths,
             HyperKmerPath* pHKV, vecKmerPath* pKmerPaths )
-    { readsToHBV<BIGK>(reads,coverage,pHBV,pReadPaths,pHKV,pKmerPaths); }
+    { readsToHBV<BIGK>(reads,coverage,dictSize,pHBV,pReadPaths,pHKV,pKmerPaths); }
 };
 
 }
 
 void buildBigKHBVFromReads( unsigned K, vecbvec const& reads, unsigned coverage,
                             HyperBasevector* pHBV, ReadPathVec* pReadPaths,
-                            HyperKmerPath* pHKP, vecKmerPath* pKmerPaths )
+                            HyperKmerPath* pHKP, vecKmerPath* pKmerPaths,
+                            size_t dictSize )
 {
-    BigK::dispatch<SillyFunctor>(K,reads,coverage,
+    BigK::dispatch<SillyFunctor>(K,reads,coverage,dictSize,
                                     pHBV,pReadPaths,pHKP,pKmerPaths);
 }

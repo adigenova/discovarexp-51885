@@ -29,6 +29,7 @@ void LongReadsToPaths( vecbvec const& reads,
                             HyperKmerPath* pHKP=nullptr,
                             vecKmerPath* pPaths=nullptr,
                             vecKmerPath* pPathsRC=nullptr,
-                            vec<big_tagged_rpint>* pPathsDB=nullptr );
+                            vec<big_tagged_rpint>* pPathsDB=nullptr,
+                            size_t dictSize=0 );
 
 #endif /* PATHS_LONG_LONGREADSTOPATHS_H_ */

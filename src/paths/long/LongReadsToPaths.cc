@@ -264,7 +264,7 @@ void LongReadsToPaths( vecbvec const& reads, unsigned k, unsigned coverage,
                         unsigned logLevel, bool useOldLRPMethod,
                         HyperBasevector* pHBV, HyperKmerPath* pHKP,
                         vecKmerPath* pPaths, vecKmerPath* pPathsRC,
-                        vec<big_tagged_rpint>* pPathsDB )
+                        vec<big_tagged_rpint>* pPathsDB, size_t dictSize )
 {
     if ( pPathsRC && !pPaths )
         FatalErr("Must specify destination for paths if you want pathsRC.");
@@ -273,6 +273,15 @@ void LongReadsToPaths( vecbvec const& reads, unsigned k, unsigned coverage,
 
     if ( useOldLRPMethod )
     {
+        // If a dictionary-size hint was supplied, convert it to the
+        // equivalent coverage value: the legacy path sizes its dictionary
+        // as nKmers/coverage.  See docs/GraphConstruction.md, item M1.
+        if ( dictSize )
+        {    size_t nKmers = reads.getKmerCount(k);
+             size_t hint = std::min(dictSize,nKmers);
+             if ( hint )
+                  coverage = std::max(1u,
+                       unsigned( (nKmers + hint - 1) / hint ) );    }
         HyperKmerPath tmpHKP;
         if ( !pHKP ) pHKP = &tmpHKP;
         vecKmerPath tmpPaths;
@@ -290,7 +299,8 @@ void LongReadsToPaths( vecbvec const& reads, unsigned k, unsigned coverage,
     }
     else
     {
-        buildBigKHBVFromReads(k,reads,coverage,pHBV,nullptr,pHKP,pPaths);
+        buildBigKHBVFromReads(k,reads,coverage,pHBV,nullptr,pHKP,pPaths,
+                             dictSize);
         if ( pPathsRC )
         {
             pPathsRC->assign(pPaths->begin(),pPaths->end());

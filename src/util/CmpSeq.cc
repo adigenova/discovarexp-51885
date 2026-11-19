@@ -688,7 +688,7 @@ int main( int argc, char *argv[] )
 
           for ( unsigned int i = 0; i < nobbits.size( ); i++ )
           {    alignment a = nobbits[i].a;
-               static align aa, aar;
+               static ::align aa, aar;
                aa.UnpackFrom(a);
                aar = aa;
                aar.ReverseThis( nobbits[i].length1, nobbits[i].length2 );

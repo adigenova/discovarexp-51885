@@ -1,0 +1,61 @@
+# ---------------------------------------------------------------------------
+# DiscovarDenovo (discovarexp) — ignored build & runtime artifacts
+#
+# Note: the *shipped* autotools outputs (configure, Makefile.in, aclocal.m4,
+# ltmain.sh, depcomp, install-sh, missing, config.guess, config.sub) are
+# tracked in this repository on purpose: the tree can be built without
+# running autoreconf.  Only what ./configure && make *generates* is ignored.
+# ---------------------------------------------------------------------------
+
+# --- configure output ---
+/Makefile
+/src/Makefile
+/config.status
+/config.log
+/config.cache
+/libtool
+/autom4te.cache/
+/configure~
+
+# --- object files and static libraries ---
+*.o
+*.a
+*.lo
+*.la
+.libs/
+.deps/
+
+# --- built binaries ---
+/src/AffineAlign
+/src/CmpSeq
+/src/CrossOut
+/src/DiscovarExp
+/src/EdgeInfo
+/src/FormPath
+/src/MakeLookupTable
+/src/NhoodInfo
+/src/QueryLookupTable
+/src/SeqInfo
+
+# --- editor / OS cruft ---
+*~
+*.swp
+.DS_Store
+
+# --- local test-data workspace (third-party clone kept out of the repo;
+#     vendor or submodule it here if it should become part of the project) ---
+/small_data_test/
+
+# --- assembly run outputs (only relevant if OUT_DIR is placed inside the
+#     repo: the pipeline creates these inside its work directory) ---
+/a.*/
+/data/
+/logs/
+/loc/
+/special/
+/local/
+/genome.fastb
+/subsam.*
+/disco_stats
+/clock.log
+/the_command

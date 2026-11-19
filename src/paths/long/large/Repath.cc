@@ -118,8 +118,26 @@ void Repath( const HyperBasevector& hb, const vecbasevector& edges,
      vecKmerPath xpaths;
      HyperKmerPath h2;
      cout << Date( ) << ": calling LongReadsToPaths" << endl;
+     // M1 (docs/GraphConstruction.md, section 7): size the K2-mer
+     // dictionary by an estimate of the number of *distinct* K2-mers
+     // rather than by a fixed fraction of the total K2-mer count.
+     // Places overlap heavily, so the total count overstates the
+     // dictionary size by the redundancy factor.  The distinct count is
+     // bounded by the trusted sequence: each K=60 edge contributes at
+     // most len-K2+1 K2-mers, counting each edge/RC-edge involution pair
+     // once.  The +25% margin covers junction-spanning kmers.  If the
+     // estimate is low, the hash set grows by splitting; if it is high,
+     // memory is wasted linearly.  A zero estimate (no K=60 edge long
+     // enough to hold a K2-mer) falls back to the legacy instance-based
+     // sizing (COVERAGE).
      unsigned const COVERAGE = 2u;
-     LongReadsToPaths( all, K2, COVERAGE, 0, False, &hb2, &h2, &xpaths );
+     size_t dictSize = 0;
+     for ( size_t i = 0; i < edges.size(); i++ )
+          if ( inv[i] >= (int) i && edges[i].isize( ) >= K2 )
+               dictSize += edges[i].isize( ) - K2 + 1;
+     if ( dictSize > 0 ) dictSize += dictSize / 4;
+     LongReadsToPaths( all, K2, COVERAGE, 0, False, &hb2, &h2, &xpaths,
+          nullptr, nullptr, dictSize );
      Destroy(all);
 
      // Write files.

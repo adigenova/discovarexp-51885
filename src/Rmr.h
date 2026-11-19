@@ -16,7 +16,7 @@
 Float ReciprocalMatchRate( const alignment_plus& ap, const basevector& s1, 
      const basevector& s2 );
 
-Float ReciprocalMatchRate( const align& a, const basevector& s1, 
+Float ReciprocalMatchRate( const ::align& a, const basevector& s1, 
      const basevector& s2 );
 
 #endif

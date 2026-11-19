@@ -1134,7 +1134,7 @@ class offset_datum {
                     << PERCENT_RATIO( 3, mismatch, overlap )
                     << ", bits = " << bits << endl;
                if ( verbosity >= 2 )
-               {    align a;
+               {    ::align a;
                     a.SetNblocks(1);
                     a.SetGap( 0, 0 );
                     a.SetLength( 0, overlap );

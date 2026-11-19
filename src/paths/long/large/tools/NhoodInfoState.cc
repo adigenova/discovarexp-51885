@@ -143,7 +143,7 @@ Bool nhood_info_state::SetState( const String & line, ostream& out,
           const basevector &E1 = hb.EdgeObject(e1), &E2 = hb.EdgeObject(e2);
           alignment al;
           SmithWatAffine( E1, E2, al );
-          align a = al;
+          ::align a = al;
           ostringstream xout;
           PrintVisualAlignment( True, xout, E1, E2, a );
           String s = xout.str( );

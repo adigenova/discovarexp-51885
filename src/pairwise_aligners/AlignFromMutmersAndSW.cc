@@ -41,7 +41,7 @@ bool AppendAlignment( avector<int> &gaps, int &gaps_end,
 		      int &p1, int &p2,
 		      alignment &a )
 {
-  align gap_align( a );
+  ::align gap_align( a );
   
   //  PRINT( gap_align.Nblocks() );
 
@@ -114,7 +114,7 @@ bool PrependAlignment( avector<int> &gaps, int &gaps_start,
 		       int gap_len1, int gap_len2,
 		       alignment &a )
 {
-  align gap_align( a );
+  ::align gap_align( a );
 
   ForceAssertEq( gap_align.Gaps(0), 0 );
        

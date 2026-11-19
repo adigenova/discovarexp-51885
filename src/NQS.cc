@@ -75,7 +75,7 @@ void CountNQS(
      return;    }
 
 void CountNQS(
-     /* inputs: */         const align& a,
+     /* inputs: */         const ::align& a,
                            const basevector& rd1, const basevector& rd2,
                            const qualvector& q1, const qualvector& q2,
      /* heuristics: */     int NQS_floor1, int NQS_floor2, int NQS_extra,
@@ -102,7 +102,7 @@ void CountNQS(
      return;    }
 
 void CountNQS( 
-     /* inputs: */         const align& a, 
+     /* inputs: */         const ::align& a, 
                            const basevector& rd1, const basevector& rd2, 
      /* heuristics: */     int NQS_extra,
      /* outputs: */        int& look, int& see,
@@ -152,7 +152,7 @@ void ConfirmBases( bitvector& confirmed, const alignment_plus& ap,
      static qualvector q2rc;
      if ( ap.Rc2( ) ) q2rc.SetToReverseOf(q2);    
      const qualvector &Q1 = q1, &Q2 = ( !ap.Rc2( ) ? q2 : q2rc );
-     const align& a = ap.a;
+     const ::align& a = ap.a;
      int j, p1 = a.pos1( ), p2 = a.pos2( );
      for ( j = 0; j < a.Nblocks( ); j++ )
      {    if ( a.Gaps(j) > 0 ) p2 += a.Gaps(j);
@@ -258,7 +258,7 @@ void OverlapTransitivity( int id1, int id2, int id3, const alignment_plus& ap12,
                     if ( ap12.Rc2( ) ) rd2.ReverseComplement( );
                     if ( ap13.Rc2( ) ) rd3.ReverseComplement( );
                     reads_loaded = True;
-                    static align a, a1, a2;
+                    static ::align a, a1, a2;
                     a.UnpackFrom(ap12.a); 
                     a1.UnpackFrom(ap13.a); 
                     a2.UnpackFrom(ap23.a);
@@ -304,7 +304,7 @@ void OverlapTransitivity( int id1, int id2, int id3, const alignment_plus& ap12,
 
      // Perform first transitivity test.
      
-     static align a;
+     static ::align a;
      a.UnpackFrom(ap12.a);
      int p1 = a.pos1( ), p2 = a.pos2( );
      for ( int j = 0; j < a.Nblocks( ); j++ )
@@ -314,7 +314,7 @@ void OverlapTransitivity( int id1, int id2, int id3, const alignment_plus& ap12,
           {    if ( c1[p1] && c2[p2] 
                     && x >= NQS_radius && x < a.Lengths(j) - NQS_radius )
                {    if ( NQS0( rd1, rd2, p1, p2, 1 ) == NQS_diff )
-                    {    static align a1, a2;
+                    {    static ::align a1, a2;
                          a1.UnpackFrom(ap23.a);
                          Bool invalid1 = False, invalid2 = False;
                          int p1_1 = a1.pos1( ), p2_1 = a1.pos2( );
