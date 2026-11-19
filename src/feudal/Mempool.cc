@@ -104,7 +104,12 @@ void Mempool::free( void* ppp, size_t siz )
 
 void Mempool::preAllocate( size_t nBytes )
 {
-    char* ppp = new char[nBytes+sizeof(Chunk)];
+    // PQVecEncoder::decode (feudal/PQVec.cc) reads 64-bit words aligned
+    // down from each vector's start, so decoding the last vector in a
+    // pre-allocated pool can read up to 7 bytes past the pool end (found
+    // by AddressSanitizer; pre-existing).  Keep 8 bytes of unbooked slack
+    // at the chunk tail so those reads stay in-bounds.
+    char* ppp = new char[nBytes+sizeof(Chunk)+8];
 #ifdef TRACK_MEMUSE
     mpMemUse->alloc(nBytes);
 #endif

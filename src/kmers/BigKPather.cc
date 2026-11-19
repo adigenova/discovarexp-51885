@@ -36,13 +36,14 @@ public:
     typedef BigDict<BIGK> BigKDict;
     BigKMerizer( BigKDict* pDict ) : mDict(*pDict) {}
 
-    void kmerize( bvec const& bv )
+    void kmerize( bvec const& bv, uint32_t seqIdx )
     { if ( bv.size() < BIGK ) return;
       KMerHasher<BIGK> hasher;
       auto itr = bv.begin();
       size_t hash = hasher.hash(itr);
-      if ( bv.size() == BIGK ) { add(BigKMer<BIGK>(bv,hash)); return; }
-      BigKMer<BIGK> kmer(bv,hash,KMerContext::initialContext(bv[BIGK]));
+      if ( bv.size() == BIGK ) { add(BigKMer<BIGK>(bv,hash,seqIdx)); return; }
+      BigKMer<BIGK> kmer(bv,hash,seqIdx,
+                         KMerContext::initialContext(bv[BIGK]));
       add(kmer);
       auto end = bv.end()-BIGK;
       while ( ++itr != end )
@@ -53,39 +54,13 @@ public:
       kmer.successor(hash,KMerContext::finalContext(itr[-1]));
       add(kmer); }
 
-    template <class OItr>
-    void map( vecbvec::const_iterator iItr, OItr oItr )
-    { bvec const& bv = *iItr;
-      if ( bv.size() < BIGK ) return;
-      KMerHasher<BIGK> hasher;
-      auto itr = bv.begin();
-      size_t hash = hasher.hash(itr);
-      if ( bv.size() == BIGK )
-      { BigKMer<BIGK> kmer(bv,hash);
-        *oItr = kmer.isRev() ? kmer.rc() : kmer; ++oItr;
-        return; }
-      BigKMer<BIGK> kmer(bv,hash,KMerContext::initialContext(bv[BIGK]));
-      *oItr = kmer.isRev() ? kmer.rc() : kmer; ++oItr;
-      auto end = bv.end()-BIGK;
-      while ( ++itr != end )
-      { hash = hasher.stepF(itr);
-        kmer.successor(hash,KMerContext(itr[-1],itr[BIGK]));
-        *oItr = kmer.isRev() ? kmer.rc() : kmer; ++oItr; }
-      hash = hasher.stepF(itr);
-      kmer.successor(hash,KMerContext::finalContext(itr[-1]));
-      *oItr = kmer.isRev() ? kmer.rc() : kmer; ++oItr; }
-
-    void reduce( BigKMer<BIGK>* key1, BigKMer<BIGK>* key2 )
-    { for ( auto itr=key1+1; itr != key2; ++itr )
-        key1->addContext(itr->getContext());
-      mDict.insertUniqueValue(*key1); }
-
     // We build the dictionary with BigKMers pointing to reads.  This updates
     // all the BigKMers in the dictionary to point to edges instead.
-    void updateDict( bvec const& edge )
+    // seqIdx must be the edge's registry index (places first, then edges).
+    void updateDict( bvec const& edge, uint32_t seqIdx )
     { KMerHasher<BIGK> hasher;
       auto itr = edge.begin();
-      BigKMer<BIGK> kmer(edge,hasher.hash(itr));
+      BigKMer<BIGK> kmer(edge,hasher.hash(itr),seqIdx);
       update(kmer.isRev()?kmer.rc():kmer);
       auto end = edge.end()-BIGK+1;
       while ( ++itr != end )
@@ -115,12 +90,15 @@ public:
     typedef BigKMerizer<BIGK> BigKmerizer;
     typedef BigDict<BIGK> BigKDict;
 
-    static void buildEdges( BigKDict const& dict, vecbvec* pEdges )
+    static void buildEdges( BigKDict const& dict, vecbvec* pEdges,
+                            std::vector<bvec const*> const* pReg )
     {
         BigKEdgeBuilder eb(dict,pEdges);
         dict.parallelForEachHHS(
-                [eb]( typename BigKDict::HHS const& hhs ) mutable
-                { for ( BigKmer const& entry : hhs )
+                [eb,pReg]( typename BigKDict::HHS const& hhs ) mutable
+                { BigKMer<BIGK>::setRegistry(pReg);
+                  BigKMer<BIGK>::setScratch(&eb.mEdgeSeq);
+                  for ( BigKmer const& entry : hhs )
                     if ( entry.isUnassigned() )
                       eb.buildEdge(entry); });
 
@@ -130,6 +108,8 @@ public:
         // if a kmer isn't marked as being on an edge, it must be a part of a
         // smooth circle: add those edges, too.  simpleCircle method isn't
         // thread-safe, so this part is single-threaded.
+        BigKMer<BIGK>::setRegistry(pReg);
+        BigKMer<BIGK>::setScratch(&eb.mEdgeSeq);
         for ( auto const& hhs : dict )
             for ( auto const& entry : hhs )
                 if ( entry.isUnassigned() )
@@ -314,16 +294,18 @@ public:
     Pather( vecbvec const& reads, BigKDict const& dict, vecbvec const& edges,
                 vec<int> const& fwdXlat, vec<int> const& revXlat,
                 ReadPathVec* pReadPaths,
-                HyperKmerPath const* pHKP, vecKmerPath* pKmerPaths )
+                HyperKmerPath const* pHKP, vecKmerPath* pKmerPaths,
+                std::vector<bvec const*> const* pReg )
     : mReads(reads), mDict(dict), mEdges(edges),
       mFwdXlat(fwdXlat), mRevXlat(revXlat), mpReadPaths(pReadPaths),
-      mpHKP(pHKP), mpKmerPaths(pKmerPaths) {}
+      mpHKP(pHKP), mpKmerPaths(pKmerPaths), mpRegistry(pReg) {}
 
     void operator()( size_t readId )
-    { bvec const& read = mReads[readId];
+    { BigKMer<BIGK>::setRegistry(mpRegistry);
+      bvec const& read = mReads[readId];
       if ( read.size() < BIGK ) return;
       KMerHasher<BIGK> hasher;
-      BigKMer<BIGK> kmer(read,hasher(read.begin()));
+      BigKMer<BIGK> kmer(read,hasher(read.begin()),uint32_t(readId));
       BigKMer<BIGK> entry = lookup(kmer);
       mTmpReadPath.setFirstSkip(entry.getOffset());
       size_t idx = &entry.getBV()-&mEdges[0];
@@ -335,7 +317,7 @@ public:
       { readLenRemaining = readLenRemaining-edgeLenRemaining+BIGK-1;
         unsigned readOffset = read.size()-readLenRemaining;
         BigKMer<BIGK> nextKmer(read,hasher(read.begin(readOffset)),
-                                KMerContext(),readOffset);
+                                uint32_t(readId),KMerContext(),readOffset);
         BigKMer<BIGK> nextEntry = lookup(nextKmer);
         ForceAssertEq(nextEntry.getOffset(),0u);
         idx = &nextEntry.getBV()-&mEdges[0];
@@ -387,6 +369,7 @@ private:
     ReadPathVec* mpReadPaths;
     HyperKmerPath const* mpHKP;
     vecKmerPath* mpKmerPaths;
+    std::vector<bvec const*> const* mpRegistry;
     ReadPath mTmpReadPath;
     KmerPath mTmpKmerPath;
 };
@@ -479,15 +462,27 @@ void readsToHBV( vecbvec const& reads, unsigned coverage, size_t dictSize,
     size_t dictSizeToUse = dictSize ?
         ( dictSize < nKmers ? dictSize : nKmers ) : nKmers/coverage;
     if ( !dictSizeToUse ) dictSizeToUse = 1;
-    BigDict<BIGK> bigDict(dictSizeToUse);
+    // M10b: compact dictionary entries refer to sequences by registry
+    // index: the places first, the edges once the edge set is final.
+    std::vector<bvec const*> registry;
+    registry.reserve(reads.size()+1000);
+    for ( size_t i = 0; i < reads.size(); ++i )
+        registry.push_back( &reads[i] );
+    // Thread-local registry: every parallel phase sets it on entry (the
+    // local gap assemblies run several readsToHV calls concurrently).
+
+    BigDict<BIGK> bigDict( dictSizeToUse,
+        typename BigKMer<BIGK>::hasher(), std::equal_to<BigKMer<BIGK>>(),
+        TFactory<BigKMer<BIGK>>(), .9 );
     BigKMerizer<BIGK> kmerizer(&bigDict);
     parallelFor(0ul,reads.size(),
-            [kmerizer,&reads]( size_t readId ) mutable
-            { kmerizer.kmerize(reads[readId]); });
+            [kmerizer,&reads,&registry]( size_t readId ) mutable
+            { BigKMer<BIGK>::setRegistry(&registry);
+              kmerizer.kmerize(reads[readId],uint32_t(readId)); });
 
     vecbvec edges;
     edges.reserve(bigDict.size()/100);
-    BigKEdgeBuilder<BIGK>::buildEdges(bigDict,&edges);
+    BigKEdgeBuilder<BIGK>::buildEdges(bigDict,&edges,&registry);
     AssertEq(edges.getKmerCount(BIGK),bigDict.size());
     vec<int> fwdXlat;
     vec<int> revXlat;
@@ -499,9 +494,14 @@ void readsToHBV( vecbvec const& reads, unsigned coverage, size_t dictSize,
     }
     else
     {
+        size_t const nPlaces = registry.size();
+        for ( size_t i = 0; i < edges.size(); ++i )
+            registry.push_back( &edges[i] );
         parallelForBatch(0ul,edges.size(),100,
-                [&edges,&kmerizer]( size_t edgeId )
-                { kmerizer.updateDict(edges[edgeId]); });
+                [&edges,&kmerizer,nPlaces,&registry]( size_t edgeId )
+                { BigKMer<BIGK>::setRegistry(&registry);
+                  kmerizer.updateDict(edges[edgeId],
+                     uint32_t(nPlaces+edgeId)); });
 
         buildHBVFromEdges(edges,BIGK,pHBV,&fwdXlat,&revXlat);
         HyperKmerPath hkp;
@@ -511,7 +511,7 @@ void readsToHBV( vecbvec const& reads, unsigned coverage, size_t dictSize,
             buildHKPFromHBV(*pHBV,fwdXlat,revXlat,pHKP);
 
         Pather<BIGK> pather(reads,bigDict,edges,fwdXlat,revXlat,
-                                pReadPaths,pHKP,pKmerPaths);
+                                pReadPaths,pHKP,pKmerPaths,&registry);
         parallelForBatch(0ul,reads.size(),10000,pather);
     }
 }
