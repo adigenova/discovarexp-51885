@@ -167,7 +167,8 @@ Dict* createDict( vecbvec const& reads, ObjectManager<VecPQVec>& quals,
         std::atomic_size_t nUniqKmers(0);
         Kmerizer impl(reads,goodLens,minFreq,nullptr,&nUniqKmers);
         KMRE mre(impl);
-        if ( !mre.run(nKmers,0ul,reads.size(),KMRE::VERBOSITY::QUIET,.9) )
+        if ( !mre.run(nKmers,0ul,reads.size(),KMRE::VERBOSITY::QUIET,.9,
+             mrePoolBytes(nKmers,sizeof(Entry)) ) )
             FatalErr("Failed to count unique kmers.  Out of buffer space.  ");
         dictSize = nUniqKmers;
     }
@@ -176,7 +177,8 @@ Dict* createDict( vecbvec const& reads, ObjectManager<VecPQVec>& quals,
     Dict* pDict = new Dict(dictSize);
     Kmerizer impl(reads,goodLens,minFreq,pDict,nullptr);
     KMRE mre(impl);
-    if ( !mre.run(nKmers,0ul,reads.size(),KMRE::VERBOSITY::QUIET,.9) )
+    if ( !mre.run(nKmers,0ul,reads.size(),KMRE::VERBOSITY::QUIET,.9,
+         mrePoolBytes(nKmers,sizeof(Entry)) ) )
         FatalErr("Failed to kmerize.  Out of buffer space.  ");
 
     // some kmers were discarded because they didn't occur often enough to

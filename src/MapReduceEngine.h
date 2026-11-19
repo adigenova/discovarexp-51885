@@ -25,6 +25,22 @@
 #include <cstdlib>
 #include <functional>
 #include <memory>
+
+/// A buffer-pool budget for MapReduceEngine::run, sized by the work at
+/// hand rather than by the machine: with a small input the keys are
+/// processed in a few extra passes (cheap: the input is already in
+/// memory) instead of the engine grabbing most of the allowed memory.
+/// Scales up to the full allowance for genuinely large inputs.
+inline size_t mrePoolBytes( size_t nKeys, size_t keySize,
+                            double divisor = 8., size_t minBytes = 512ul<<20 )
+{
+    size_t work = nKeys*keySize;
+    size_t pool = size_t(work/divisor);
+    if ( pool < minBytes ) pool = minBytes;
+    size_t avail = MemAvailable(.9);
+    return pool < avail ? pool : avail;
+}
+
 #include <mutex>
 #include <omp.h>
 #include <thread>
@@ -388,7 +404,8 @@ public:
     // linearish in their production of Ks.
     template <class Itr>
     bool run( size_t nKs, Itr beg, Itr end,
-                VERBOSITY verbose=VERBOSITY::SILENT, double meanUsage=.8 )
+                VERBOSITY verbose=VERBOSITY::SILENT, double meanUsage=.8,
+                size_t maxMemBytes=0 )
     {
         if ( inParallelSection() )
         {
@@ -400,7 +417,8 @@ public:
 
         // these three consts could be made into an arguments, if necessary
         //size_t const minPasses = 0;
-        size_t const maxMem = MemAvailable(.9);
+        size_t const maxMem = maxMemBytes ?
+            std::min(maxMemBytes,MemAvailable(.9)) : MemAvailable(.9);
         size_t const nThreads = getConfiguredNumThreads();
 
         size_t maxKs = meanUsage*nThreads/(nThreads+1)*maxMem/sizeof(Key);

@@ -403,6 +403,14 @@ warns at ~2 bytes per read base (`GapToyCore.cc:772-787`).
    allocation with ~40–60 B effective overhead. With 10–40M places this is
    ~1–3 GB (not dominant, but also the data is scattered, which hurts the
    parallel sort/unique).
+5. **The spill-sort buffer pool is sized by the machine, not the work.**
+   `MapReduceEngine::run` (`MapReduceEngine.h:403-424`) budgets its
+   per-thread key buffers at up to 90% of the *allowed* memory
+   (`MemAvailable(.9)`, i.e. of `MAX_MEM_GB`) and then scales batches up
+   by another ×2 — regardless of how small the input is. This dominated
+   small-genome runs entirely: the E. coli 50× test peaked at 6.8 GB,
+   nearly all of it kmer-instance buffers sized from the 8 GB allowance.
+   (Addressed by M8 below.)
 
 ### 6.2 Approximate peak budget (stage B, `Repath` window)
 
@@ -549,6 +557,32 @@ via the existing spill-sort `MapReduceEngine`, exactly as the K=60
 instance records (hash + placeId/offset + context) to sorted runs, reduce
 to distinct kmers, then insert only distinct entries into the in-RAM dict.
 Unnecessary once M1–M3 are in place.
+
+### M8 — Cap the MapReduce buffer pool by need ⓔ (small-input sanity) — **IMPLEMENTED**
+
+`MapReduceEngine::run` sized its key-buffer pool from the memory
+allowance (90% of `MAX_MEM_GB`, then ×2), not from the work: a bacterial
+genome on a big machine grabbed the whole allowance. The engine gains an
+optional `maxMemBytes` budget on `run()`, and a helper,
+
+```cpp
+mrePoolBytes( nKeys, keySize, divisor = 8., minBytes = 512 MB )
+```
+
+sizes it by the work: one eighth of the raw key-instance stream, with a
+512 MB floor, never exceeding the old allowance. Small inputs then run
+in a few extra passes over the (already in-memory) input — cheap — while
+large inputs keep today's behavior because the work-based estimate
+exceeds the allowance and the old cap wins.
+
+Call sites updated: the two `createDict` kmerize runs
+(`BuildReadQGraph.cc:170/179`) and the vertex-dict run
+(`HBVFromEdges.cc:261`, both K=60 and K=200 stages).
+
+Measured on the E. coli 50× test: **peak 6.8 GB → 1.1 GB**, runtime
+52 s → 65 s, and a bit-identical result (same final checksum), confirming
+that the pool size affects buffering only, not the dictionary or the
+assembly.
 
 ### Expected result and order of attack
 

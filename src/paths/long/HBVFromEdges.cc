@@ -258,7 +258,8 @@ void buildHBVFromEdges( vecbvec const& edges, unsigned K, HyperBasevector* pHBV,
     {
         VertexDictBuilder vdb(edges,K,&dict);
         MapReduceEngine<VertexDictBuilder,EdgeEnd,EdgeEnd::Hasher> mre(vdb);
-        if ( !mre.run(4*nEdges,0ul,nEdges) )
+        if ( !mre.run(4*nEdges,0ul,nEdges,decltype(mre)::VERBOSITY::SILENT,
+             .8,mrePoolBytes(4*nEdges,sizeof(EdgeEnd))) )
             FatalErr("Map/Reduce operation failed in finding vertices.");
     }
 

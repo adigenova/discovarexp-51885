@@ -346,7 +346,10 @@ lines as paths, split at captured gaps). It is validated on the E. coli
 K-12 50× MiSeq test (52 s end-to-end, 0 misassemblies, N50-perfect
 1.27 Mb): all 478 segments byte-identical to `a.fasta`, all RC pairs
 sequence-consistent, and the path-length N50 reproduces the reported
-133,298 exactly. Still open in P0: CI with bundled
+133,298 exactly. **M8** (need-based MapReduce buffer pool) also landed:
+the same E. coli run now peaks at 1.1 GB instead of 6.8 GB (bit-identical
+result), so small-genome runs no longer inherit the memory profile of
+human-scale ones. Still open in P0: CI with bundled
 mini-datasets, M3 (16-byte kmer records).
 | **P1** PE150 adaptation | parameterized read length, re-tuned pathing | PE150 `X=small` ≈ PE250-class edge accuracy |
 | **P2** LR-0/LR-1 | long-read loading + minimap2 projection onto `a.200` | ≥95% of ≥20 kb reads project onto ≥2 edges with consistent coordinates |
