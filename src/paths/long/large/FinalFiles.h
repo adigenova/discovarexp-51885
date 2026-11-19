@@ -27,4 +27,15 @@ void FinalFiles(
      const String& X, map<String,GapToyResults>& res, const String& SAMPLE, 
      const String& species, const vec<int>& fosmids, const vecbasevector& G );
 
+// Write the final assembly graph as GFA1: edges as segments (the graph is
+// doubled, so reverse-complement twins inv[e] are also segments, and
+// palindromic edges are self-reverse), vertex adjacencies as links with
+// the de Bruijn overlap of K-1 bases, and scaffold lines as paths (the most
+// likely alternative per cell, as in DumpLineFiles; captured-gap cells
+// break a line into pieces named line<i>, line<i>.2, ...).
+
+void WriteGFA( const String& gfa_file, const HyperBasevector& hb,
+     const vec<int>& inv, const ReadPathVec& paths,
+     const vec<vec<vec<vec<int>>>>& lines, const vec<vec<covcount>>& covs );
+
 #endif

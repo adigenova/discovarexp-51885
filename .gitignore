@@ -48,6 +48,7 @@
 
 # --- assembly run outputs (only relevant if OUT_DIR is placed inside the
 #     repo: the pipeline creates these inside its work directory) ---
+/ecoli_asm/
 /a.*/
 /data/
 /logs/

@@ -18,6 +18,145 @@
 #include "paths/long/large/Lines.h"
 #include "random/Random.h"
 
+namespace {
+
+// Pick the most likely path through a branch cell, by read support from
+// the flanking edge e.  This mirrors the logic of DumpLineFiles
+// (Lines.cc), which is used to build a.lines.fasta.
+
+int MostLikelyCellPath( const vec<vec<int>>& x, const int e,
+     const vec<int>& inv, const VecULongVec& paths_index,
+     const ReadPathVec& paths )
+{
+     vec<int> cov( x.size( ), 0 );
+     for ( int l = 0; l < (int) paths_index[e].size( ); l++ )
+     {    const ReadPath& p = paths[ paths_index[e][l] ];
+          for ( int m = 0; m < (int) p.size( ); m++ )
+          {    if ( p[m] != e ) continue;
+               vec<Bool> match( x.size( ), True );
+               for ( int r = 0; r < x.isize( ); r++ )
+               {    for ( int s = 0; s < x[r].isize( ); s++ )
+                    {    if ( m + 1 + s >= (int) p.size( ) ) break;
+                         if ( p[m+1+s] != x[r][s] )
+                         {    match[r] = False;
+                              break;    }    }    }
+               if ( Sum(match) == 1 )
+               {    for ( int r = 0; r < x.isize( ); r++ )
+                         if ( match[r] ) cov[r]++;    }    }    }
+     int re = inv[e];
+     for ( int l = 0; l < (int) paths_index[re].size( ); l++ )
+     {    const ReadPath& q = paths[ paths_index[re][l] ];
+          vec<int> p;
+          for ( int m = q.size( ) - 1; m >= 0; m-- )
+               p.push_back( inv[ q[m] ] );
+          for ( int m = 0; m < (int) p.size( ); m++ )
+          {    if ( p[m] != e ) continue;
+               vec<Bool> match( x.size( ), True );
+               for ( int r = 0; r < x.isize( ); r++ )
+               {    for ( int s = 0; s < x[r].isize( ); s++ )
+                    {    if ( m + 1 + s >= (int) p.size( ) ) break;
+                         if ( p[m+1+s] != x[r][s] )
+                         {    match[r] = False;
+                              break;    }    }    }
+               if ( Sum(match) == 1 )
+               {    for ( int r = 0; r < x.isize( ); r++ )
+                         if ( match[r] ) cov[r]++;    }    }    }
+     vec<int> ids( x.size( ), vec<int>::IDENTITY );
+     ReverseSortSync( cov, ids );
+     return ids[0];    }
+
+} // end of anonymous namespace
+
+void WriteGFA( const String& gfa_file, const HyperBasevector& hb,
+     const vec<int>& inv, const ReadPathVec& paths,
+     const vec<vec<vec<vec<int>>>>& lines, const vec<vec<covcount>>& covs )
+{
+     const int K = hb.K( );
+     VecULongVec paths_index;
+     invert( paths, paths_index, hb.E( ) );
+     Ofstream( out, gfa_file );
+
+     // Header.
+
+     out << "H\tVN:Z:1.0\n";
+
+     // Segments: one per edge.  The graph is doubled: each edge has a
+     // reverse-complement twin inv[e], and both are written.  LN is the
+     // sequence length, KC the estimated k-mer count (coverage coloring),
+     // INV the reverse-complement twin.
+
+     for ( int e = 0; e < hb.E( ); e++ )
+     {    const basevector& b = hb.EdgeObject(e);
+          out << "S\t" << e << "\t" << b << "\tLN:i:" << b.isize( );
+          if ( covs.nonempty( ) && covs[0].nonempty( ) && covs[0][e].Def( ) )
+          {    float cov = covs[0][e].Cov( );
+               int kmers = Max( 1, b.isize( ) - K + 1 );
+               out << "\tKC:i:" << int( round( cov * kmers ) )
+                    << "\tcov:f:" << cov;    }
+          if ( inv[e] != e ) out << "\tINV:i:" << inv[e];
+          out << "\n";    }
+
+     // Links: every adjacency at every vertex, consecutive edges
+     // overlapping by K-1 bases (de Bruijn convention).
+
+     for ( int v = 0; v < hb.N( ); v++ )
+          for ( int i = 0; i < hb.ToSize(v); i++ )
+               for ( int j = 0; j < hb.FromSize(v); j++ )
+                    out << "L\t" << hb.ITo(v,i) << "\t+\t" << hb.IFrom(v,j)
+                         << "\t+\t" << ( K - 1 ) << "M\n";
+
+     // Paths: scaffold lines.
+
+     for ( int i = 0; i < lines.isize( ); i++ )
+     {    // Don't print both a line and its reverse complement.
+
+          if ( i > 0
+               && lines[i-1].front( )[0][0] == inv[ lines[i].back( )[0][0] ] )
+               continue;
+          const vec<vec<vec<int>>>& L = lines[i];
+          Bool circular = ( L.size( ) > 1
+               && L.front( )[0][0] == L.back( )[0][0] );
+          vec<int> p;
+          int piece = 0;
+          for ( int j = 0; j < L.isize( ); j++ )
+          {    if ( circular && j == L.isize( ) - 1 ) break;
+               const vec<vec<int>>& x = L[j];
+
+               // Captured gap: close the current piece.
+
+               if ( x.solo( ) && x[0].empty( ) )
+               {    if ( p.nonempty( ) )
+                    {    out << "P\t";
+                         if ( piece > 0 ) out << "line" << i << "."
+                              << piece + 1 << "\t";
+                         else out << "line" << i << "\t";
+                         for ( int m = 0; m < p.isize( ); m++ )
+                              out << ( m ? " " : "" ) << p[m] << "+";
+                         out << " *\n";
+                         piece++;    }
+                    p.clear( );
+                    continue;    }
+
+               // Choose the most likely path through a branch cell (as in
+               // DumpLineFiles); other cells have a single path.
+
+               int best = 0;
+               if ( j % 2 == 1 )
+                    best = MostLikelyCellPath( x, L[j-1][0][0], inv,
+                         paths_index, paths );
+               for ( int m = 0; m < x[best].isize( ); m++ )
+                    p.push_back( x[best][m] );    }
+
+          // Close the last piece.
+
+          if ( p.nonempty( ) )
+          {    out << "P\t";
+               if ( piece > 0 ) out << "line" << i << "." << piece + 1 << "\t";
+               else out << "line" << i << "\t";
+               for ( int m = 0; m < p.isize( ); m++ )
+                    out << ( m ? " " : "" ) << p[m] << "+";
+               out << " *\n";    }    }    }
+
 // Build final assembly files, starting from the results of scaffolding.
 
 void FinalFiles(
@@ -76,7 +215,12 @@ void FinalFiles(
              // Generate scaffolded assembly fasta file and other output files.
 
              MakeFinalFasta( hb, inv, linesx, npairsx, covsx, hitsx, final_dir, 
-                  work_dir, ALIGN_TO_GENOME );     }
+                  work_dir, ALIGN_TO_GENOME );
+
+             // GFA1 output for graph interop (Bandage, odgi, ...).
+
+             WriteGFA( final_dir + "/a.lines.gfa", hb, inv, paths,
+                  linesx, covsx );     }
           
           {    vecbasevector afinal;
                for ( int e = 0; e < hb.E( ); e++ )

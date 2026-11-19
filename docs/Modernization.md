@@ -338,8 +338,16 @@ conversion in `KmerShape.h`, the `ifstream`→bool conversion in `System.cc`,
 a non-conforming `std::map` comparator/allocator in `SAM2CRD.cc`, dead
 template code in `KmerParcelsClasses.h`, a genuine `std::cout`-for-
 `std::endl` typo in `GapToyTools4.cc`, and missing explicit template
-instantiations for `ProcessFrequentKmers`. Still open in P0: CI with bundled
-mini-datasets, GFA writer, M3 (16-byte kmer records).
+instantiations for `ProcessFrequentKmers`. The **GFA1 writer** has landed
+as well (`WriteGFA` in `FinalFiles.{h,cc}`, emitting
+`a.final/a.lines.gfa`: doubled segments with `INV` reverse-complement
+tags and `KC` coverage, all vertex adjacencies as `199M` links, scaffold
+lines as paths, split at captured gaps). It is validated on the E. coli
+K-12 50× MiSeq test (52 s end-to-end, 0 misassemblies, N50-perfect
+1.27 Mb): all 478 segments byte-identical to `a.fasta`, all RC pairs
+sequence-consistent, and the path-length N50 reproduces the reported
+133,298 exactly. Still open in P0: CI with bundled
+mini-datasets, M3 (16-byte kmer records).
 | **P1** PE150 adaptation | parameterized read length, re-tuned pathing | PE150 `X=small` ≈ PE250-class edge accuracy |
 | **P2** LR-0/LR-1 | long-read loading + minimap2 projection onto `a.200` | ≥95% of ≥20 kb reads project onto ≥2 edges with consistent coordinates |
 | **P3** LR-2 scaffolder | line-level long-read scaffold graph, Poisson link thresholds | scaffold N50 ≥ 5× PE-only baseline on test genome; ≤1 misjoin/Mb |
