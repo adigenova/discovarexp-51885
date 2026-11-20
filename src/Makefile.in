@@ -95,7 +95,8 @@ host_triplet = @host@
 bin_PROGRAMS = NhoodInfo$(EXEEXT) CmpSeq$(EXEEXT) CrossOut$(EXEEXT) \
 	DiscovarExp$(EXEEXT) EdgeInfo$(EXEEXT) FormPath$(EXEEXT) \
 	QueryLookupTable$(EXEEXT) AffineAlign$(EXEEXT) \
-	SeqInfo$(EXEEXT) MakeLookupTable$(EXEEXT)
+	SeqInfo$(EXEEXT) MakeLookupTable$(EXEEXT) \
+	ProjectLongReads$(EXEEXT) ScaffoldLongReads$(EXEEXT)
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_compare_version.m4 \
@@ -128,6 +129,7 @@ am_libDiscovarExp_a_OBJECTS = CleanEfasta.$(OBJEXT) ErrNo.$(OBJEXT) \
 	NhoodInfoStuff.$(OBJEXT) Floatvector.$(OBJEXT) \
 	Mempool.$(OBJEXT) common.$(OBJEXT) \
 	SupportedHyperBasevector4.$(OBJEXT) Clean200.$(OBJEXT) \
+	LongReadProjection.$(OBJEXT) LongReadScaffold.$(OBJEXT) \
 	Basevector.$(OBJEXT) PreCorrectOldNew.$(OBJEXT) \
 	VecOverlap.$(OBJEXT) PerfStat.$(OBJEXT) \
 	ExtendUnipathSeqs.$(OBJEXT) FastgGraph.$(OBJEXT) \
@@ -292,9 +294,16 @@ MakeLookupTable_DEPENDENCIES = libDiscovarExp.a $(am__DEPENDENCIES_1)
 am_NhoodInfo_OBJECTS = NhoodInfo.$(OBJEXT)
 NhoodInfo_OBJECTS = $(am_NhoodInfo_OBJECTS)
 NhoodInfo_DEPENDENCIES = libDiscovarExp.a $(am__DEPENDENCIES_1)
+am_ProjectLongReads_OBJECTS = ProjectLongReads.$(OBJEXT)
+ProjectLongReads_OBJECTS = $(am_ProjectLongReads_OBJECTS)
+ProjectLongReads_DEPENDENCIES = libDiscovarExp.a $(am__DEPENDENCIES_1)
 am_QueryLookupTable_OBJECTS = QueryLookupTable.$(OBJEXT)
 QueryLookupTable_OBJECTS = $(am_QueryLookupTable_OBJECTS)
 QueryLookupTable_DEPENDENCIES = libDiscovarExp.a $(am__DEPENDENCIES_1)
+am_ScaffoldLongReads_OBJECTS = ScaffoldLongReads.$(OBJEXT)
+ScaffoldLongReads_OBJECTS = $(am_ScaffoldLongReads_OBJECTS)
+ScaffoldLongReads_DEPENDENCIES = libDiscovarExp.a \
+	$(am__DEPENDENCIES_1)
 am_SeqInfo_OBJECTS = SeqInfo.$(OBJEXT)
 SeqInfo_OBJECTS = $(am_SeqInfo_OBJECTS)
 SeqInfo_DEPENDENCIES = libDiscovarExp.a $(am__DEPENDENCIES_1)
@@ -393,7 +402,9 @@ am__depfiles_remade = ./$(DEPDIR)/AddSuperReads.Po \
 	./$(DEPDIR)/LocalLayout.Po ./$(DEPDIR)/Logger.Po \
 	./$(DEPDIR)/LongHyper.Po ./$(DEPDIR)/LongProtoTools.Po \
 	./$(DEPDIR)/LongReadPatchOptimizer.Po \
-	./$(DEPDIR)/LongReadPather.Po ./$(DEPDIR)/LongReadTools.Po \
+	./$(DEPDIR)/LongReadPather.Po \
+	./$(DEPDIR)/LongReadProjection.Po \
+	./$(DEPDIR)/LongReadScaffold.Po ./$(DEPDIR)/LongReadTools.Po \
 	./$(DEPDIR)/LongReadsToPaths.Po ./$(DEPDIR)/LookAlign.Po \
 	./$(DEPDIR)/LookupTable.Po ./$(DEPDIR)/LookupTableBuilder.Po \
 	./$(DEPDIR)/MD5.Po ./$(DEPDIR)/MakeAlignments.Po \
@@ -427,9 +438,9 @@ am__depfiles_remade = ./$(DEPDIR)/AddSuperReads.Po \
 	./$(DEPDIR)/Preclose.Po ./$(DEPDIR)/Prefab.Po \
 	./$(DEPDIR)/PrintAlignment.Po ./$(DEPDIR)/PrintMemStats.Po \
 	./$(DEPDIR)/ProcBuf.Po ./$(DEPDIR)/ProcessFrequentKmers.Po \
-	./$(DEPDIR)/ProcessGap.Po ./$(DEPDIR)/QualNibbleVec.Po \
-	./$(DEPDIR)/Quality.Po ./$(DEPDIR)/Qualvector.Po \
-	./$(DEPDIR)/QueryLookupTable.Po \
+	./$(DEPDIR)/ProcessGap.Po ./$(DEPDIR)/ProjectLongReads.Po \
+	./$(DEPDIR)/QualNibbleVec.Po ./$(DEPDIR)/Quality.Po \
+	./$(DEPDIR)/Qualvector.Po ./$(DEPDIR)/QueryLookupTable.Po \
 	./$(DEPDIR)/QueryLookupTableCore.Po ./$(DEPDIR)/RNGen.Po \
 	./$(DEPDIR)/ReadBAM.Po ./$(DEPDIR)/ReadError.Po \
 	./$(DEPDIR)/ReadFillDatabase.Po ./$(DEPDIR)/ReadNameLookup.Po \
@@ -444,17 +455,18 @@ am__depfiles_remade = ./$(DEPDIR)/AddSuperReads.Po \
 	./$(DEPDIR)/RemodelGapTools.Po ./$(DEPDIR)/Repath.Po \
 	./$(DEPDIR)/Rmr.Po ./$(DEPDIR)/RunTime.Po ./$(DEPDIR)/SAM.Po \
 	./$(DEPDIR)/SAM2CRD.Po ./$(DEPDIR)/Samples.Po \
-	./$(DEPDIR)/ScoreAlignment.Po ./$(DEPDIR)/Sepdev.Po \
-	./$(DEPDIR)/SeqInfo.Po ./$(DEPDIR)/SeqInterval.Po \
-	./$(DEPDIR)/ShortKmerReadPather.Po ./$(DEPDIR)/Shuffle.Po \
-	./$(DEPDIR)/SimpleWalk.Po ./$(DEPDIR)/Simplify.Po \
-	./$(DEPDIR)/SmithWatAffine.Po ./$(DEPDIR)/SmithWatBanded.Po \
-	./$(DEPDIR)/SmithWatBandedA.Po ./$(DEPDIR)/SmithWatFree.Po \
-	./$(DEPDIR)/SmithWatScore.Po ./$(DEPDIR)/SmithWaterman.Po \
-	./$(DEPDIR)/SortKmers.Po ./$(DEPDIR)/SortKmersA.Po \
-	./$(DEPDIR)/SortKmersB.Po ./$(DEPDIR)/SortKmersC.Po \
-	./$(DEPDIR)/SortKmersD.Po ./$(DEPDIR)/SubsumptionList.Po \
-	./$(DEPDIR)/Superb.Po ./$(DEPDIR)/SupportedHyperBasevector.Po \
+	./$(DEPDIR)/ScaffoldLongReads.Po ./$(DEPDIR)/ScoreAlignment.Po \
+	./$(DEPDIR)/Sepdev.Po ./$(DEPDIR)/SeqInfo.Po \
+	./$(DEPDIR)/SeqInterval.Po ./$(DEPDIR)/ShortKmerReadPather.Po \
+	./$(DEPDIR)/Shuffle.Po ./$(DEPDIR)/SimpleWalk.Po \
+	./$(DEPDIR)/Simplify.Po ./$(DEPDIR)/SmithWatAffine.Po \
+	./$(DEPDIR)/SmithWatBanded.Po ./$(DEPDIR)/SmithWatBandedA.Po \
+	./$(DEPDIR)/SmithWatFree.Po ./$(DEPDIR)/SmithWatScore.Po \
+	./$(DEPDIR)/SmithWaterman.Po ./$(DEPDIR)/SortKmers.Po \
+	./$(DEPDIR)/SortKmersA.Po ./$(DEPDIR)/SortKmersB.Po \
+	./$(DEPDIR)/SortKmersC.Po ./$(DEPDIR)/SortKmersD.Po \
+	./$(DEPDIR)/SubsumptionList.Po ./$(DEPDIR)/Superb.Po \
+	./$(DEPDIR)/SupportedHyperBasevector.Po \
 	./$(DEPDIR)/SupportedHyperBasevector2.Po \
 	./$(DEPDIR)/SupportedHyperBasevector3.Po \
 	./$(DEPDIR)/SupportedHyperBasevector4.Po \
@@ -522,12 +534,14 @@ SOURCES = $(libDiscovarExp_a_SOURCES) $(AffineAlign_SOURCES) \
 	$(CmpSeq_SOURCES) $(CrossOut_SOURCES) $(DiscovarExp_SOURCES) \
 	$(EdgeInfo_SOURCES) $(FormPath_SOURCES) \
 	$(MakeLookupTable_SOURCES) $(NhoodInfo_SOURCES) \
-	$(QueryLookupTable_SOURCES) $(SeqInfo_SOURCES)
+	$(ProjectLongReads_SOURCES) $(QueryLookupTable_SOURCES) \
+	$(ScaffoldLongReads_SOURCES) $(SeqInfo_SOURCES)
 DIST_SOURCES = $(libDiscovarExp_a_SOURCES) $(AffineAlign_SOURCES) \
 	$(CmpSeq_SOURCES) $(CrossOut_SOURCES) $(DiscovarExp_SOURCES) \
 	$(EdgeInfo_SOURCES) $(FormPath_SOURCES) \
 	$(MakeLookupTable_SOURCES) $(NhoodInfo_SOURCES) \
-	$(QueryLookupTable_SOURCES) $(SeqInfo_SOURCES)
+	$(ProjectLongReads_SOURCES) $(QueryLookupTable_SOURCES) \
+	$(ScaffoldLongReads_SOURCES) $(SeqInfo_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -737,9 +751,13 @@ libDiscovarExp_a_SOURCES = paths/long/CleanEfasta.cc \
 	paths/long/large/tools/NhoodInfoStuff.cc Floatvector.cc \
 	system/SpinLockedData.h feudal/Mempool.cc layout/common.cc \
 	paths/long/SupportedHyperBasevector4.cc kmers/KMer.h \
-	paths/long/large/Clean200.cc graph/FindCells.h Basevector.cc \
-	paths/long/PreCorrectOldNew.cc VecOverlap.cc \
-	kmers/MakeLookup.h reporting/PerfStat.cc \
+	paths/long/large/Clean200.cc \
+	paths/long/large/LongReadProjection.h \
+	paths/long/large/LongReadProjection.cc \
+	paths/long/large/LongReadScaffold.h \
+	paths/long/large/LongReadScaffold.cc kmers/KmerDictPacked.h \
+	graph/FindCells.h Basevector.cc paths/long/PreCorrectOldNew.cc \
+	VecOverlap.cc kmers/MakeLookup.h reporting/PerfStat.cc \
 	pairwise_aligners/SmithWatScore.h IteratorRange.h \
 	polymorphism/Edit.h paths/ExtendUnipathSeqs.cc \
 	paths/SimpleWalk.h fastg/FastgGraph.cc paths/long/FillPairs.h \
@@ -1067,6 +1085,10 @@ FormPath_LDADD = libDiscovarExp.a $(PTHREAD_LIBS)
 DiscovarExp_SOURCES = paths/long/large/DiscovarExp.cc
 MakeLookupTable_SOURCES = lookup/MakeLookupTable.cc
 SeqInfo_SOURCES = paths/long/large/tools/SeqInfo.cc
+ProjectLongReads_SOURCES = paths/long/large/tools/ProjectLongReads.cc
+ProjectLongReads_LDADD = libDiscovarExp.a $(PTHREAD_LIBS)
+ScaffoldLongReads_SOURCES = paths/long/large/tools/ScaffoldLongReads.cc
+ScaffoldLongReads_LDADD = libDiscovarExp.a $(PTHREAD_LIBS)
 CrossOut_LDADD = libDiscovarExp.a $(LIBZ_LIB) $(PTHREAD_LIBS)
 MakeLookupTable_LDADD = libDiscovarExp.a $(PTHREAD_LIBS)
 DiscovarExp_LDADD = libDiscovarExp.a $(LIBZ_LIB) $(JEMALLOC_LIB) $(PTHREAD_LIBS)
@@ -1188,9 +1210,17 @@ NhoodInfo$(EXEEXT): $(NhoodInfo_OBJECTS) $(NhoodInfo_DEPENDENCIES) $(EXTRA_Nhood
 	@rm -f NhoodInfo$(EXEEXT)
 	$(AM_V_CXXLD)$(CXXLINK) $(NhoodInfo_OBJECTS) $(NhoodInfo_LDADD) $(LIBS)
 
+ProjectLongReads$(EXEEXT): $(ProjectLongReads_OBJECTS) $(ProjectLongReads_DEPENDENCIES) $(EXTRA_ProjectLongReads_DEPENDENCIES) 
+	@rm -f ProjectLongReads$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(ProjectLongReads_OBJECTS) $(ProjectLongReads_LDADD) $(LIBS)
+
 QueryLookupTable$(EXEEXT): $(QueryLookupTable_OBJECTS) $(QueryLookupTable_DEPENDENCIES) $(EXTRA_QueryLookupTable_DEPENDENCIES) 
 	@rm -f QueryLookupTable$(EXEEXT)
 	$(AM_V_CXXLD)$(CXXLINK) $(QueryLookupTable_OBJECTS) $(QueryLookupTable_LDADD) $(LIBS)
+
+ScaffoldLongReads$(EXEEXT): $(ScaffoldLongReads_OBJECTS) $(ScaffoldLongReads_DEPENDENCIES) $(EXTRA_ScaffoldLongReads_DEPENDENCIES) 
+	@rm -f ScaffoldLongReads$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(ScaffoldLongReads_OBJECTS) $(ScaffoldLongReads_LDADD) $(LIBS)
 
 SeqInfo$(EXEEXT): $(SeqInfo_OBJECTS) $(SeqInfo_DEPENDENCIES) $(EXTRA_SeqInfo_DEPENDENCIES) 
 	@rm -f SeqInfo$(EXEEXT)
@@ -1350,6 +1380,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/LongProtoTools.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/LongReadPatchOptimizer.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/LongReadPather.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/LongReadProjection.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/LongReadScaffold.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/LongReadTools.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/LongReadsToPaths.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/LookAlign.Po@am__quote@ # am--include-marker
@@ -1416,6 +1448,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ProcBuf.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ProcessFrequentKmers.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ProcessGap.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ProjectLongReads.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/QualNibbleVec.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/Quality.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/Qualvector.Po@am__quote@ # am--include-marker
@@ -1447,6 +1480,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/SAM.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/SAM2CRD.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/Samples.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ScaffoldLongReads.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ScoreAlignment.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/Sepdev.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/SeqInfo.Po@am__quote@ # am--include-marker
@@ -1664,6 +1698,34 @@ Clean200.obj: paths/long/large/Clean200.cc
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='paths/long/large/Clean200.cc' object='Clean200.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o Clean200.obj `if test -f 'paths/long/large/Clean200.cc'; then $(CYGPATH_W) 'paths/long/large/Clean200.cc'; else $(CYGPATH_W) '$(srcdir)/paths/long/large/Clean200.cc'; fi`
+
+LongReadProjection.o: paths/long/large/LongReadProjection.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT LongReadProjection.o -MD -MP -MF $(DEPDIR)/LongReadProjection.Tpo -c -o LongReadProjection.o `test -f 'paths/long/large/LongReadProjection.cc' || echo '$(srcdir)/'`paths/long/large/LongReadProjection.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/LongReadProjection.Tpo $(DEPDIR)/LongReadProjection.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='paths/long/large/LongReadProjection.cc' object='LongReadProjection.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o LongReadProjection.o `test -f 'paths/long/large/LongReadProjection.cc' || echo '$(srcdir)/'`paths/long/large/LongReadProjection.cc
+
+LongReadProjection.obj: paths/long/large/LongReadProjection.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT LongReadProjection.obj -MD -MP -MF $(DEPDIR)/LongReadProjection.Tpo -c -o LongReadProjection.obj `if test -f 'paths/long/large/LongReadProjection.cc'; then $(CYGPATH_W) 'paths/long/large/LongReadProjection.cc'; else $(CYGPATH_W) '$(srcdir)/paths/long/large/LongReadProjection.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/LongReadProjection.Tpo $(DEPDIR)/LongReadProjection.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='paths/long/large/LongReadProjection.cc' object='LongReadProjection.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o LongReadProjection.obj `if test -f 'paths/long/large/LongReadProjection.cc'; then $(CYGPATH_W) 'paths/long/large/LongReadProjection.cc'; else $(CYGPATH_W) '$(srcdir)/paths/long/large/LongReadProjection.cc'; fi`
+
+LongReadScaffold.o: paths/long/large/LongReadScaffold.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT LongReadScaffold.o -MD -MP -MF $(DEPDIR)/LongReadScaffold.Tpo -c -o LongReadScaffold.o `test -f 'paths/long/large/LongReadScaffold.cc' || echo '$(srcdir)/'`paths/long/large/LongReadScaffold.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/LongReadScaffold.Tpo $(DEPDIR)/LongReadScaffold.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='paths/long/large/LongReadScaffold.cc' object='LongReadScaffold.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o LongReadScaffold.o `test -f 'paths/long/large/LongReadScaffold.cc' || echo '$(srcdir)/'`paths/long/large/LongReadScaffold.cc
+
+LongReadScaffold.obj: paths/long/large/LongReadScaffold.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT LongReadScaffold.obj -MD -MP -MF $(DEPDIR)/LongReadScaffold.Tpo -c -o LongReadScaffold.obj `if test -f 'paths/long/large/LongReadScaffold.cc'; then $(CYGPATH_W) 'paths/long/large/LongReadScaffold.cc'; else $(CYGPATH_W) '$(srcdir)/paths/long/large/LongReadScaffold.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/LongReadScaffold.Tpo $(DEPDIR)/LongReadScaffold.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='paths/long/large/LongReadScaffold.cc' object='LongReadScaffold.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o LongReadScaffold.obj `if test -f 'paths/long/large/LongReadScaffold.cc'; then $(CYGPATH_W) 'paths/long/large/LongReadScaffold.cc'; else $(CYGPATH_W) '$(srcdir)/paths/long/large/LongReadScaffold.cc'; fi`
 
 PreCorrectOldNew.o: paths/long/PreCorrectOldNew.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT PreCorrectOldNew.o -MD -MP -MF $(DEPDIR)/PreCorrectOldNew.Tpo -c -o PreCorrectOldNew.o `test -f 'paths/long/PreCorrectOldNew.cc' || echo '$(srcdir)/'`paths/long/PreCorrectOldNew.cc
@@ -5123,6 +5185,20 @@ NhoodInfo.obj: paths/long/large/tools/NhoodInfo.cc
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o NhoodInfo.obj `if test -f 'paths/long/large/tools/NhoodInfo.cc'; then $(CYGPATH_W) 'paths/long/large/tools/NhoodInfo.cc'; else $(CYGPATH_W) '$(srcdir)/paths/long/large/tools/NhoodInfo.cc'; fi`
 
+ProjectLongReads.o: paths/long/large/tools/ProjectLongReads.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ProjectLongReads.o -MD -MP -MF $(DEPDIR)/ProjectLongReads.Tpo -c -o ProjectLongReads.o `test -f 'paths/long/large/tools/ProjectLongReads.cc' || echo '$(srcdir)/'`paths/long/large/tools/ProjectLongReads.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/ProjectLongReads.Tpo $(DEPDIR)/ProjectLongReads.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='paths/long/large/tools/ProjectLongReads.cc' object='ProjectLongReads.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ProjectLongReads.o `test -f 'paths/long/large/tools/ProjectLongReads.cc' || echo '$(srcdir)/'`paths/long/large/tools/ProjectLongReads.cc
+
+ProjectLongReads.obj: paths/long/large/tools/ProjectLongReads.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ProjectLongReads.obj -MD -MP -MF $(DEPDIR)/ProjectLongReads.Tpo -c -o ProjectLongReads.obj `if test -f 'paths/long/large/tools/ProjectLongReads.cc'; then $(CYGPATH_W) 'paths/long/large/tools/ProjectLongReads.cc'; else $(CYGPATH_W) '$(srcdir)/paths/long/large/tools/ProjectLongReads.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/ProjectLongReads.Tpo $(DEPDIR)/ProjectLongReads.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='paths/long/large/tools/ProjectLongReads.cc' object='ProjectLongReads.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ProjectLongReads.obj `if test -f 'paths/long/large/tools/ProjectLongReads.cc'; then $(CYGPATH_W) 'paths/long/large/tools/ProjectLongReads.cc'; else $(CYGPATH_W) '$(srcdir)/paths/long/large/tools/ProjectLongReads.cc'; fi`
+
 QueryLookupTable.o: lookup/QueryLookupTable.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT QueryLookupTable.o -MD -MP -MF $(DEPDIR)/QueryLookupTable.Tpo -c -o QueryLookupTable.o `test -f 'lookup/QueryLookupTable.cc' || echo '$(srcdir)/'`lookup/QueryLookupTable.cc
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/QueryLookupTable.Tpo $(DEPDIR)/QueryLookupTable.Po
@@ -5136,6 +5212,20 @@ QueryLookupTable.obj: lookup/QueryLookupTable.cc
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='lookup/QueryLookupTable.cc' object='QueryLookupTable.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o QueryLookupTable.obj `if test -f 'lookup/QueryLookupTable.cc'; then $(CYGPATH_W) 'lookup/QueryLookupTable.cc'; else $(CYGPATH_W) '$(srcdir)/lookup/QueryLookupTable.cc'; fi`
+
+ScaffoldLongReads.o: paths/long/large/tools/ScaffoldLongReads.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ScaffoldLongReads.o -MD -MP -MF $(DEPDIR)/ScaffoldLongReads.Tpo -c -o ScaffoldLongReads.o `test -f 'paths/long/large/tools/ScaffoldLongReads.cc' || echo '$(srcdir)/'`paths/long/large/tools/ScaffoldLongReads.cc
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/ScaffoldLongReads.Tpo $(DEPDIR)/ScaffoldLongReads.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='paths/long/large/tools/ScaffoldLongReads.cc' object='ScaffoldLongReads.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ScaffoldLongReads.o `test -f 'paths/long/large/tools/ScaffoldLongReads.cc' || echo '$(srcdir)/'`paths/long/large/tools/ScaffoldLongReads.cc
+
+ScaffoldLongReads.obj: paths/long/large/tools/ScaffoldLongReads.cc
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT ScaffoldLongReads.obj -MD -MP -MF $(DEPDIR)/ScaffoldLongReads.Tpo -c -o ScaffoldLongReads.obj `if test -f 'paths/long/large/tools/ScaffoldLongReads.cc'; then $(CYGPATH_W) 'paths/long/large/tools/ScaffoldLongReads.cc'; else $(CYGPATH_W) '$(srcdir)/paths/long/large/tools/ScaffoldLongReads.cc'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/ScaffoldLongReads.Tpo $(DEPDIR)/ScaffoldLongReads.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='paths/long/large/tools/ScaffoldLongReads.cc' object='ScaffoldLongReads.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o ScaffoldLongReads.obj `if test -f 'paths/long/large/tools/ScaffoldLongReads.cc'; then $(CYGPATH_W) 'paths/long/large/tools/ScaffoldLongReads.cc'; else $(CYGPATH_W) '$(srcdir)/paths/long/large/tools/ScaffoldLongReads.cc'; fi`
 
 SeqInfo.o: paths/long/large/tools/SeqInfo.cc
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT SeqInfo.o -MD -MP -MF $(DEPDIR)/SeqInfo.Tpo -c -o SeqInfo.o `test -f 'paths/long/large/tools/SeqInfo.cc' || echo '$(srcdir)/'`paths/long/large/tools/SeqInfo.cc
@@ -5455,6 +5545,8 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/LongProtoTools.Po
 	-rm -f ./$(DEPDIR)/LongReadPatchOptimizer.Po
 	-rm -f ./$(DEPDIR)/LongReadPather.Po
+	-rm -f ./$(DEPDIR)/LongReadProjection.Po
+	-rm -f ./$(DEPDIR)/LongReadScaffold.Po
 	-rm -f ./$(DEPDIR)/LongReadTools.Po
 	-rm -f ./$(DEPDIR)/LongReadsToPaths.Po
 	-rm -f ./$(DEPDIR)/LookAlign.Po
@@ -5521,6 +5613,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/ProcBuf.Po
 	-rm -f ./$(DEPDIR)/ProcessFrequentKmers.Po
 	-rm -f ./$(DEPDIR)/ProcessGap.Po
+	-rm -f ./$(DEPDIR)/ProjectLongReads.Po
 	-rm -f ./$(DEPDIR)/QualNibbleVec.Po
 	-rm -f ./$(DEPDIR)/Quality.Po
 	-rm -f ./$(DEPDIR)/Qualvector.Po
@@ -5552,6 +5645,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/SAM.Po
 	-rm -f ./$(DEPDIR)/SAM2CRD.Po
 	-rm -f ./$(DEPDIR)/Samples.Po
+	-rm -f ./$(DEPDIR)/ScaffoldLongReads.Po
 	-rm -f ./$(DEPDIR)/ScoreAlignment.Po
 	-rm -f ./$(DEPDIR)/Sepdev.Po
 	-rm -f ./$(DEPDIR)/SeqInfo.Po
@@ -5809,6 +5903,8 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/LongProtoTools.Po
 	-rm -f ./$(DEPDIR)/LongReadPatchOptimizer.Po
 	-rm -f ./$(DEPDIR)/LongReadPather.Po
+	-rm -f ./$(DEPDIR)/LongReadProjection.Po
+	-rm -f ./$(DEPDIR)/LongReadScaffold.Po
 	-rm -f ./$(DEPDIR)/LongReadTools.Po
 	-rm -f ./$(DEPDIR)/LongReadsToPaths.Po
 	-rm -f ./$(DEPDIR)/LookAlign.Po
@@ -5875,6 +5971,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/ProcBuf.Po
 	-rm -f ./$(DEPDIR)/ProcessFrequentKmers.Po
 	-rm -f ./$(DEPDIR)/ProcessGap.Po
+	-rm -f ./$(DEPDIR)/ProjectLongReads.Po
 	-rm -f ./$(DEPDIR)/QualNibbleVec.Po
 	-rm -f ./$(DEPDIR)/Quality.Po
 	-rm -f ./$(DEPDIR)/Qualvector.Po
@@ -5906,6 +6003,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/SAM.Po
 	-rm -f ./$(DEPDIR)/SAM2CRD.Po
 	-rm -f ./$(DEPDIR)/Samples.Po
+	-rm -f ./$(DEPDIR)/ScaffoldLongReads.Po
 	-rm -f ./$(DEPDIR)/ScoreAlignment.Po
 	-rm -f ./$(DEPDIR)/Sepdev.Po
 	-rm -f ./$(DEPDIR)/SeqInfo.Po

@@ -371,13 +371,128 @@ peak 1.2–1.3 GB.  Still open in P0: CI with bundled
 mini-datasets.
 | **P1** PE150 adaptation | parameterized read length, re-tuned pathing | PE150 `X=small` ≈ PE250-class edge accuracy |
 | **P2** LR-0/LR-1 | long-read loading + minimap2 projection onto `a.200` | ≥95% of ≥20 kb reads project onto ≥2 edges with consistent coordinates |
-| **P3** LR-2 scaffolder | line-level long-read scaffold graph, Poisson link thresholds | scaffold N50 ≥ 5× PE-only baseline on test genome; ≤1 misjoin/Mb |
+| **P3** LR-2 scaffolder | read-threading consensus over the K=200 graph (transition votes, repeat entry-exit pairing, circle extension) | scaffold N50 ≥ 5× PE-only baseline on test genome; ≤1 misjoin/Mb |
 | **P4** LR-3 gap filling | ONT-guided recruitment into `AssembleGaps`/`CorrectionSuite` | captured-gap count reduced ≥50% on test genome; no quality regression in filled gaps |
 | **P5** PH-1..3 | pair + ONT phase links, phase blocks, haplotagged outputs | phase block N50 ≥ 500 kb at 10× ONT; pair-consistency QA reported |
 | **P6** benchmarking | NA12878-scale run + report vs baselines (wengan, SPAdes+long-read scaffolder, hifiasm on HiFi-only) | characterize H1: scaffold N50 vs ONT coverage/N50 curves, switch-error rates, BUSCO/QUAST-LG, runtime/memory |
 
 Sequencing note: P2–P4 and PH-2 share one ONT dataset; no incremental data
 cost across the plan.
+
+### P3 status: read threading (LR-2 redesign)
+
+The first LR-2 design (scaffold *links* between contigs, Liger-style
+transitive reduction + matching) produced 2,191 raw links for ~42 real
+gaps on E. coli — a mapping-quality audit showed why, and led to a
+redesign around **read threading** instead of link matching.
+
+**Mapping-quality audit** (per-read identity/coverage, now emitted in
+`OUT_HEAD.readstats.txt` / `.linkstats.txt`):
+
+* seed k-mers were accepted with up to 16 occurrences in the graph —
+  repeat and diploid-shared k-mers became ambiguous anchors that
+  shattered chains (now `MAX_MULT=1`: reads thread their own haplotype);
+* every chain break between two normal edges became a "scaffold link"
+  with **no** per-read quality check, and single-anchor blocks
+  (spurious seeds) dominated the raw link set (now `MIN_ANCHOR_BLOCK=2`
+  on both flanks + `MIN_CHAIN_COV=0.5`);
+* with the gates: 2,191 raw links collapse to **6 real gaps** (mean
+  gap ≈ 1.2 kb, gap sd ≤ 12 bp across reads) — confirming that
+  the a.fin/a.patched unitigs are already graph-connected through
+  short edges, so almost all "links" were noise;
+* per-read identity (19-mer seed hit rate) is 27–30% on the ONT R10
+  simulation — reads genuinely map (median 647 anchors/read, anchored
+  span ≈ read length), the deficit is ONT error (~26% 19-mer survival)
+  plus sequence absent from the graph.
+
+**Redesign** (`LongReadScaffold.cc`): each read's consistent
+anchor chain votes **edge→edge transitions** (in both mirror worlds,
+so fwd/rc reads agree); a consensus successor map threads the graph
+through variant bubbles and short edges.  Repeats are handled by
+spanning-read **entry–exit pairing** (single-edge transition triples
+plus short-run pairs for multi-edge collapsed repeats such as rrn),
+with exit slots bounded by the distinct-voted-predecessor count.
+Walks close circular scaffolds on self-landing; a circle-extension
+phase chains path termini into donors, alternating with re-walk
+rounds until no progress.  Non-branching vertices follow the graph
+(reads are only needed at branches); reconvergent bubbles are
+skipped; evidence-free forks (ONT coverage gaps) are resolved by a
+best-downstream-support guess.
+
+**E. coli result** (10× ONT R10 simulation, `a.patched`,
+MIN_READ=10000, ANCHOR_STEP=12): scaffold N50 **600 kb = 4.5×**
+PE-only (133 kb), largest **circular scaffold 2.65 Mb (57% of the
+4.64 Mb genome)**, 3 circular scaffolds, total scaffolded sequence
+≈ genome size.  Remaining fragmentation is ONT junction-coverage gaps
+(~3–4× per junction → ~5% unspanned) and repeat-multiplicity
+ambiguity; both are natural inputs for P4 (gap filling: the 6 real
+~1.2 kb gaps plus jump gaps) rather than more link detection.
+
+### P3 mapper alternative: bundled minimap2 (MAPPER=mm2)
+
+`ScaffoldLongReads MAPPER=mm2` maps the reads with the **bundled
+minimap2** (`minimap2/minimap2/minimap2`, build with
+`make -C minimap2/minimap2 aarch64=1` on ARM) against a **one-strand
+reference** — maximal branch-resolved lines of the doubled graph with
+one orientation kept per line/mirror pair (520 lines, N50 145 kb) —
+then converts every PAF mapping into an exact per-edge **graph path
+in both directions**: `+` hits walk a line's edges forward, `-` hits
+walk the involution-reversed mirror line, with read coordinates at
+the line-edge boundaries computed from the alignment CIGAR (linear
+interpolation drifts ~500 bp per 50 kb of ONT indels).  The paths
+feed the same vote/threading core (`DEBUG_READ=<name>` with
+`VERBOSE=True` dumps the raw PAF, segments, and every stored link
+record for one read).
+
+`MIN_SEG` selects the waypoint granularity.  A sweep on E. coli
+(500 → 10000) found a sharp optimum at **3500**:
+
+| MIN_SEG | paths (circular) | total | N50 | vs PE-only |
+|---|---|---|---|---|
+| 500 | 21 (1) | 4.27 Mb | 339 kb | 2.5× |
+| 1000 | 10 (0) | 4.45 Mb | 715 kb | 5.4× |
+| 1500 | 10 (0) | 4.51 Mb | 715 kb | 5.4× |
+| 2000 | 7 (1) | 5.00 Mb | 1039 kb | 7.8× |
+| **3500** | **1 (1)** | **4.62 Mb** | **4.62 Mb** | **34.7×** |
+| 5000 | 3 (1) | 4.52 Mb | 4275 kb | 32.1× |
+| 7500 | 7 (0) | 5.29 Mb | 3312 kb | 24.8× |
+| 10000 | 12 (1) | 4.42 Mb | 627 kb | 4.7× |
+
+**MIN_SEG=3500 (the default) closes the genome**: one circular
+scaffold of 4,624,007 bp over 210 edges, **zero repeat
+over-crossings** (the walk makes exactly one lap — backbone-only
+waypoints cannot over-cross small hubs).  Validated against the
+E. coli K-12 reference (`minimap2 -x asm5`): 4.41 Mb aligns in 88
+blocks, sorted along the scaffold they traverse the reference
+monotonically with **exactly one circular wrap and zero order
+violations — no misjoins**.  The 109 internal gaps (213 kb of N's)
+are the price of the coarse waypoints: the walk takes the voted
+jump shortcuts instead of threading the small graph edges between
+backbone neighbors (those edges exist in `a.patched` — filling the
+jumps by graph-path traversal or ONT consensus is the P4 target).
+
+| Metric | PE-only | seed aligner | mm2 MIN_SEG=0 | mm2 MIN_SEG=1000 | **mm2 MIN_SEG=3500** |
+|---|---|---|---|---|---|
+| scaffold N50 | 133,298 bp | 600 kb (4.5×) | 450 kb (3.4×) | 715 kb (5.4×) | **4.62 Mb (34.7×)** |
+| scaffold paths | — | 11 | 26 | 10 | **1** |
+| circular | — | 3 | 3 | 0 | **1 (closed)** |
+| largest scaffold | 512 kb | 2.65 Mb | 816 kb | 1.56 Mb | **4.62 Mb** |
+| misjoins vs reference | — | (not measured) | (not measured) | (not measured) | **0** |
+
+The coarse rule matches the wengan philosophy confirmed in our own
+pipeline: *map to contigs, link contigs* — with the added twist
+that the one-strand line reference lets minimap2 align reads
+cleanly across variant bubbles (small edges ride inside long line
+targets), and the doubled-graph PAF conversion restores exact
+per-edge coordinates for both read directions.
+
+| Metric | PE-only | LR-2 v1 (matching) | LR-2 v2 (threading) |
+|---|---|---|---|
+| scaffold N50 | 133,298 bp | 346,373 bp (2.6×) | 600 kb (4.5×) |
+| largest scaffold | 512 kb | 512 kb | **2.65 Mb circular** |
+| circular scaffolds | — | 0 | 3 |
+| raw links / gaps | — | 2,191 for ~42 gaps | 6 real gaps |
+
 
 ---
 
@@ -386,8 +501,8 @@ cost across the plan.
 | wengan concept | Discovar counterpart / integration point |
 |---|---|
 | efficient short-read contig set | `buildReadQGraph` → `Repath` → `Clean200` (`a.200`), with graph alternatives preserved — stronger substrate |
-| long-read mapping to contigs | LR-1 projection onto `a.200` edges (external minimap2, `SystemSucceed` pattern) |
-| long-read link graph for scaffolding | LR-2 over lines, replacing pair-only `MakeGaps` links; Poisson thresholds |
+| long-read mapping to contigs | bundled minimap2 (`minimap2/minimap2`, one-strand line reference, PAF→graph paths in fwd/rev) or internal seed aligner; LR-1 projection onto `a.200` edges |
+| long-read link graph for scaffolding | LR-2 read threading over edges/lines (transition-vote consensus with repeat entry-exit pairing), complementing pair-only `MakeGaps` links |
 | long-read-assisted gap closing | LR-3 feeding the existing `AssembleGaps`/`CorrectionSuite` local stack |
 | conservative conflict breaking | line-level uniqueness checks + short-read pair verification |
 | (new here) graph alternatives as phasing substrate | `Lines.cc` cells + `a.200.paths` pairs + LR-1 threads → PH-1..3 |
