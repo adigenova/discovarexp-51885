@@ -458,6 +458,26 @@ record for one read).
 | 7500 | 7 (0) | 5.29 Mb | 3312 kb | 24.8× |
 | 10000 | 12 (1) | 4.42 Mb | 627 kb | 4.7× |
 
+**Internal aligner vs the minimap2 path** (both with the
+MIN_SEG waypoint rule; the seed path bridges its dense anchors over
+small edges and gates each waypoint occurrence on
+`MIN_ANCHOR_BLOCK` anchors, the analog of the mm2 mapping gates):
+
+| mapper | best MIN_SEG | paths (circular) | total | largest | misjoins vs reference |
+|---|---|---|---|---|---|
+| **mm2 (default)** | 3500 | **1 (1)** | 4.62 Mb | 4.62 Mb circular | **0** |
+| seed aligner | 2000 | 2 (1) | 4.65 Mb | 4.54 Mb circular | 3, all in the ~134 kb rotation seam |
+
+Both aligners close the genome — their successor structures agree
+closely (398 vs 412 voted-successor edges at their optima) — but the
+minimap2 votes are cleaner (mapping identity + length gates), giving
+the seam-free single circle, while the k-mer anchor path needs a
+lower MIN_SEG (denser anchors compensate for coarser per-anchor
+confidence) and duplicates a seam at the closure rotation point.
+The bundled binary is spawned from the tool; linking
+`libminimap2.a` and calling `mm_map_frag` directly would be the same
+engine with identical output.
+
 **MIN_SEG=3500 (the default) closes the genome**: one circular
 scaffold of 4,624,007 bp over 210 edges, **zero repeat
 over-crossings** (the walk makes exactly one lap — backbone-only
@@ -485,6 +505,122 @@ that the one-strand line reference lets minimap2 align reads
 cleanly across variant bubbles (small edges ride inside long line
 targets), and the doubled-graph PAF conversion restores exact
 per-edge coordinates for both read directions.
+
+### P4 status: gap filling (LR-3)
+
+The closed E. coli circle starts with 109 internal N-gaps (213 kb)
+where the coarse waypoints jump over the small edges between
+backbone neighbors.  P4 runs as two stages inside the scaffolder
+(`LongReadScaffold.cc`, stage 6b/6c):
+
+**Phase 1 — gap threading (graph).**  For every jump with a read
+gap estimate (sd ≤ 12 bp on this data), a depth-first search over
+the graph enumerates interior paths a → … → b whose chain size
+matches the estimate (slop 100 + gap/10, only covering ONT indel
+drift).  Candidates that duplicate placed sequence are rejected
+twice over: edges already in the path, and *mirror* copies
+(`inv[e]` of placed edges — the doubled graph holds both
+orientations).
+
+**Phase 2 — ONT-consensus filling (reads).**  Every junction's
+supporting reads contribute their *flank-anchored gap span* —
+`read[a.r2 … b.r1)` — during mapping, so a plain column majority
+across samples is the consensus (no alignment needed; the samples
+start at the same genomic position by construction).  A junction's
+spanning reads come in **both orientations**: reads that threaded
+(a → b) directly, and rc reads that threaded the mirror junction
+(inv[b] → inv[a]) — the mirror samples are reverse-complemented
+and pooled, so every gap contributes *all* of its spanning reads.
+(The pooling also matches the vote bookkeeping: `jump_gap` counts
+are mirror-doubled by design, so `.gaps.txt` support includes both
+orientations — a consensus gate that only looked at one
+orientation stranded junctions with one-sided read support as
+N's.)  The consensus is used two ways:
+
+* *validation*: a graph route whose sequence contradicts the
+  reads (sampled 19-mer probes) is rejected even as the only
+  candidate — this caught the collapsed-repeat junction
+  (e949→e571) where the graph offers the *other locus's* interval
+  as a branch and the reads hold the correct one;
+* *filling*: junctions with no consistent graph route are filled
+  from the consensus instead of N's.
+
+**Result** (E. coli, MAPPER=mm2 MIN_SEG=3500): 109 gaps → 100
+graph-filled (211.7 kb) + 9 ONT-filled (39.4 kb) + **0 N bp** —
+every gap spanned by reads is filled: exact graph sequence where
+the graph agrees with the reads, read consensus where it does
+not.  The circle is now **4,641,750 bp vs the 4,641,652 bp
+reference, 100.0% aligned** (`sim/validate_scaffold.py`, minimap2
+asm5), one circular wrap, and **zero misjoins attributable to the
+scaffolder or the gap filling**.  The single flagged region is a
+~1.8 kb inverted segment *inside* the 67 kb graph edge e288 — a
+pre-existing PE misassembly inherited from `a.patched` (present
+in every scaffold built from it; before P4 it hid inside an
+unaligned gap and was invisible to the validator).  Fixing it
+belongs upstream (variant/error cleaning of the K=200 graph),
+not in LR-3.
+
+| P4 metric | before | after |
+|---|---|---|
+| internal N-gaps | 109 (213,461 N bp) | 9 (0 N bp) |
+| filled from the graph | — | 100 gaps / 211,692 bp |
+| filled from ONT reads | — | 9 gaps / 39,412 bp |
+| reference coverage | 95.0% | **100.0%** |
+| scaffold size | 4,624,007 bp | **4,641,750 bp** (ref: 4,641,652) |
+
+**Consensus quality — the lesson of the column majority.**  The
+first implementation took a plain column majority over the
+flank-anchored samples and scored **59% mean identity** on the
+E. coli fills (worst 0%): each read's flank-alignment end drifts
+by its own accumulated indels, so column positions do not
+correspond across samples, and collapsed-repeat junctions pool
+reads from different copies.  Replacing it with the internal
+**`MultipleAligner`** (the engine `AssembleGaps` uses for PE gap
+consensus: longest sample seeds, every other sample aligned to
+the evolving consensus with a phred-scored ONT error model,
+subst/del/ins ≈ 0.5/0.8/0.3%) yields **99.85% mean identity,
+worst fill 99.25%** — and the stronger consensus also validates
+more graph routes (100 vs 90 fills).
+
+**Full-run verification (Disco evaluation).**  A complete fresh
+pipeline run (`DiscovarExp READS=… OUT_DIR=… REFHEAD=…`)
+reproduces the E. coli acceptance bit-identically — the stats
+block matches the original run and the **final checksum is
+617468569301748**, exactly the gate value, confirming the
+P0/M9/M10/M10b modernization preserved the assembler end-to-end.
+`sim/disco_eval.py` recomputes the `a.final/stats` metrics for
+any FASTA (N50s, 1 kb+/10 kb+ bases, and **N50 perfect stretch**
+from error-free runs in the `--cs` alignments), plus per-fill
+identity:
+
+| Disco metric | PE-only (`a.final/a.lines.fasta`) | hybrid (P3+P4) |
+|---|---|---|
+| scaffolds | 123 | **1** |
+| scaffold N50 | 133,298 | **4,641,750** |
+| bases in 1 kb+ scaffolds | 4,573,768 (98.5%) | **4,641,750 (100%)** |
+| aligned bases | 99.2% | **100.0%** |
+| mismatch rate / 100 kb | 0.20 | 3.60 |
+| indel rate / 100 kb | 29.70 | 28.96 |
+| N50 perfect stretch | 133,298 | 126,841 |
+| ONT fill identity vs ref | — | **99.85% mean, 99.25% worst** |
+
+Read: the hybrid keeps the PE's per-stretch purity (perfect
+stretch 126.8 kb vs 133.3 kb) while being one closed circle —
+the residual mismatch excess (~3.4/100 kb over PE) is the ONT
+fills' ~0.15% consensus error plus the e288 inversion plus
+collapsed-repeat mosaic columns; the indel rate is identical to
+the PE baseline, i.e. a property of the graph, not of the fills.
+(The pipeline's internal `N50 perfect stretch` = 1,269,320 on
+this data is an edge-level metric not bounded by scaffold
+length; `disco_eval.py` reports the per-scaffold equivalent for
+both arms so the comparison is apples-to-apples.)
+
+P4 criterion ("captured-gap count reduced ≥50%, no quality
+regression in filled gaps"): N-bp reduced **100%**; fills carry
+0.15% consensus error at full coverage — pass.  Remaining
+polish: quality-weighted consensus scoring once ONT qualities
+are available, and the e288 upstream fix.
+
 
 | Metric | PE-only | LR-2 v1 (matching) | LR-2 v2 (threading) |
 |---|---|---|---|

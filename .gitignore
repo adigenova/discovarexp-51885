@@ -34,8 +34,23 @@
 /src/FormPath
 /src/MakeLookupTable
 /src/NhoodInfo
+/src/ProjectLongReads
 /src/QueryLookupTable
+/src/ScaffoldLongReads
 /src/SeqInfo
+
+# --- vendored minimap2 build artifacts (sources are tracked) ---
+# Upstream clone metadata kept out of the tree at
+# minimap2/.upstream-minimap2-git (origin: github.com/lh3/minimap2,
+# release 2.31 r1302); the sources are vendored as plain files.
+/minimap2/.upstream-minimap2-git/
+/minimap2/minimap2/*.o
+/minimap2/minimap2/minimap2
+/minimap2/minimap2/minimap2-lite
+/minimap2/minimap2/sdust
+/minimap2/minimap2/libminimap2.a
+/minimap2/minimap2/python/build/
+/minimap2/minimap2/python/minimap2.cpython*.so
 
 # --- editor / OS cruft ---
 *~

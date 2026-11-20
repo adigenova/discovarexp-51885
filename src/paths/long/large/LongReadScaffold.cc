@@ -5,8 +5,10 @@
 #include "FastIfstream.h"
 #include "MainTools.h"
 #include "dna/Bases.h"
+#include "paths/long/ultra/MultipleAligner.h"
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <cstdint>
 #include <deque>
 #include <map>
@@ -103,6 +105,13 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
      std::map< int, std::map<int,int> > trans_votes;
      std::map< std::pair<int,int>, LStat > jump_gap;
      std::map< std::pair<int,int>, std::map<int,int> > pair_votes;
+     // P4: per-junction read gap samples (for ONT-consensus
+     // filling): junction -> (read name, [r1,r2) of the gap
+     // content on that read).  The samples are flank-anchored:
+     // each starts exactly at the left edge's read-alignment end,
+     // so a plain column majority over samples is the consensus.
+     std::map< std::pair<int,int>,
+          vec< std::pair< String, std::pair<int,int> > > > gap_reads;
      struct Trans { int e1, e2; Bool adjacent; int gap; };
      auto vote_transitions = [&]( vec<Trans> const& tr )
      {    int n_links_read = 0;
@@ -417,7 +426,12 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
                                         ToString(dist) )
                                    << ")" << endl;
                          c_ok++;
-                         tr.push_back( { e1, e2, adjacent, dist } );    }
+                         tr.push_back( { e1, e2, adjacent, dist } );
+                         // P4: remember the read span of the gap
+                         // content for ONT-consensus filling.
+                         if ( !adjacent )
+                              gap_reads[ {e1,e2} ].push_back(
+                                   { qname, { a.r2, b.r1 } } );    }
                     n_tr_same += c_same;    n_tr_rep += c_rep;
                     n_tr_deep += c_deep;    n_tr_ovl += c_ovl;
                     n_tr_oob += c_oob;    n_tr_slop += c_slop;
@@ -780,6 +794,43 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
                          i <= blocks[t].second; i++ )
                          blk[i] = t;
                vec<Trans> tr;
+               if ( min_seg > 0 )
+               {    // Coarse mode, the same rule as the mm2 MIN_SEG
+                    // filter: only long edges are waypoints.  Small
+                    // variant and hub edges cannot become waypoints
+                    // or be over-crossed; their anchors are bridged
+                    // over, so the vote is waypoint-to-waypoint with
+                    // the read distance as the gap.  Both flanking
+                    // waypoint occurrences must be supported by at
+                    // least min_anchor_block anchors -- the analog
+                    // of the mm2 mapping-length gate.
+                    vec<int> wo_e, wo_first, wo_last, wo_cnt;
+                    for ( int i = 0; i < anchors.isize( ); i++ )
+                    {    Anchor const& a = anchors[i];
+                         if ( edges[ a.e ].isize( ) < min_seg )
+                              continue;
+                         if ( !wo_e.empty( )
+                              && wo_e.back( ) == int(a.e) )
+                         {    wo_last.back( ) = int(a.r);
+                              wo_cnt.back( )++;    }
+                         else
+                         {    wo_e.push_back( int(a.e) );
+                              wo_first.push_back( int(a.r) );
+                              wo_last.push_back( int(a.r) );
+                              wo_cnt.push_back(1);    }    }
+                    for ( int i = 0; i + 1 < wo_e.isize( ); i++ )
+                    {    if ( wo_cnt[i] < min_anchor_block
+                              || wo_cnt[i+1] < min_anchor_block )
+                              continue;
+                         int e1 = wo_e[i], e2 = wo_e[i+1];
+                         if ( edge_class[e1] == EDGE_REPEAT
+                              || edge_class[e2] == EDGE_REPEAT )
+                              continue;
+                         Bool adjacent =
+                              ( to_right[e1] == to_left[e2] );
+                         tr.push_back( { e1, e2, adjacent,
+                              wo_first[i+1] - wo_last[i] } );    }    }
+               else
                for ( int i = 1; i < anchors.isize( ); i++ )
                {    Anchor const& a = anchors[i-1];
                     Anchor const& b = anchors[i];
@@ -788,15 +839,6 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
                     if ( edge_class[ a.e ] == EDGE_REPEAT ) continue;
                     if ( edge_class[ b.e ] == EDGE_REPEAT ) continue;
                     int e1 = int(a.e), e2 = int(b.e);
-                    // Waypoint gate (the same rule as the mm2
-                    // MIN_SEG filter): in coarse mode only
-                    // transitions between long edges vote, so small
-                    // variant and hub edges cannot become waypoints
-                    // or be over-crossed.
-                    if ( min_seg > 0
-                         && ( edges[e1].isize( ) < min_seg
-                              || edges[e2].isize( ) < min_seg ) )
-                         continue;
                     Bool adjacent = ( to_right[e1] == to_left[e2] );
                     Bool chained = sameOrAdjacent( a, b );
                     if ( chained && adjacent )
@@ -1413,6 +1455,580 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
           << " bubble skips, " << n_guess << " branch guesses, "
           << n_repeat_cross << " repeat crossings)" << endl;
 
+
+     std::map< std::pair<int,int>, vec<String> > gap_samples;
+     // ---- 6b. P4 phase 2: ONT-consensus gap sequences ----
+
+     // For every junction with >= 2 flank-anchored read samples,
+     // extract the reads' gap subsequences and take a column
+     // majority.  The consensus both validates graph-threaded
+     // fills (phase 1 accepts a candidate only if it is consistent
+     // with the reads) and fills the junctions the graph cannot.
+     std::map< std::pair<int,int>, String > gap_cons;
+     {    // Which reads carry which junction spans?  A junction's
+          // spanning reads come in BOTH orientations: reads that
+          // threaded (a -> b) directly, and rc reads that threaded
+          // the mirror junction (inv[b] -> inv[a]) -- the mirror
+          // samples are reverse-complemented and pooled, so every
+          // gap contributes all of its spanning reads.
+          struct GapWant { int a, b, r1, r2; Bool rc; };
+          std::map< String, vec<GapWant> > want;
+          for ( auto const& kv : gap_reads )
+          {    int a = kv.first.first, b = kv.first.second;
+               int nd = kv.second.size( ), nm = 0;
+               auto mit = gap_reads.find( { inv[b], inv[a] } );
+               if ( mit != gap_reads.end( ) )
+                    nm = mit->second.size( );
+               if ( nd + nm < 2 ) continue;
+               for ( auto const& s : kv.second )
+               {    GapWant w = { a, b, s.second.first,
+                         s.second.second, False };
+                    want[ s.first ].push_back(w);    }
+               if ( mit != gap_reads.end( ) )
+                    for ( auto const& s : mit->second )
+                    {    GapWant w = { a, b, s.second.first,
+                              s.second.second, True };
+                         want[ s.first ].push_back(w);    }    }
+          if ( !want.empty( ) )
+          {    // Stream the reads once and pull the spans.
+               String cmd2 = "cat " + reads_file;
+               if ( reads_file.Contains( ".gz", -1 ) )
+                    cmd2 = "zcat " + reads_file;
+               fast_pipe_ifstream in2(cmd2);
+               auto rc_in_place = []( String& s )
+               {    int L2 = s.isize( );
+                    for ( int z = 0; z < L2 / 2; z++ )
+                    {    char c1 = s[z], c2 = s[ L2 - 1 - z ];
+                         s[z] = ( c2=='A' ? 'T' : c2=='T' ? 'A'
+                              : c2=='C' ? 'G' : c2=='G' ? 'C' : 'N' );
+                         s[ L2 - 1 - z ] =
+                              ( c1=='A' ? 'T' : c1=='T' ? 'A'
+                              : c1=='C' ? 'G' : c1=='G' ? 'C'
+                              : 'N' );    }
+                    if ( L2 % 2 == 1 )
+                         s[ L2 / 2 ] =
+                              ( s[ L2 / 2 ]=='A' ? 'T'
+                              : s[ L2 / 2 ]=='T' ? 'A'
+                              : s[ L2 / 2 ]=='C' ? 'G'
+                              : s[ L2 / 2 ]=='G' ? 'C' : 'N' );    };
+               String line2, hdr, seq2;
+               while ( true )
+               {    getline( in2, line2 );
+                    if ( in2.fail( ) ) break;
+                    if ( line2.empty( ) ) continue;
+                    if ( line2[0] == '>' )
+                    {    if ( !hdr.empty( ) && want.count(hdr) )
+                              for ( auto const& w : want[hdr] )
+                              {    String sub = seq2.substr(
+                                        w.r1, w.r2 - w.r1 );
+                                   if ( w.rc ) rc_in_place(sub);
+                                   gap_samples[ { w.a, w.b } ]
+                                        .push_back(sub);    }
+                         hdr = line2.substr( 1 );
+                         size_t sp = hdr.find( ' ' );
+                         if ( sp != String::npos )
+                              hdr.resize(sp);
+                         seq2.resize(0);    }
+                    else if ( line2[0] != '@' )
+                         seq2 += line2;    }
+               if ( !hdr.empty( ) && want.count(hdr) )
+                    for ( auto const& w : want[hdr] )
+                    {    String sub = seq2.substr(
+                              w.r1, w.r2 - w.r1 );
+                         if ( w.rc ) rc_in_place(sub);
+                         gap_samples[ { w.a, w.b } ]
+                              .push_back(sub);    }    }    }
+     // Consensus per junction via the internal MultipleAligner (the
+     // same engine AssembleGaps uses for PE gap consensus): the
+     // longest sample seeds the alignment, every other sample is
+     // aligned to the evolving consensus with a phred-scored ONT
+     // error model (subst/del/ins), so the samples' indel drift is
+     // corrected rather than trusted as column offsets -- a plain
+     // column majority scored only ~59% identity on the E. coli
+     // fills because each read's flank-alignment end drifts by its
+     // own accumulated indels.
+     for ( auto const& kv : gap_samples )
+     {    vec<String> const& smp = kv.second;
+          if ( smp.size( ) < 2 ) continue;
+          int best = 0;
+          for ( int i = 1; i < smp.isize( ); i++ )
+               if ( smp[i].isize( ) > smp[best].isize( ) )
+                    best = i;
+          if ( smp[best].isize( ) < 100 ) continue;
+          // sanitize: ACGT only
+          bvec cons0;
+          for ( int i = 0; i < smp[best].isize( ); i++ )
+          {    char c = smp[best][i];
+               if ( c == 'A' ) cons0.push_back(0);
+               else if ( c == 'C' ) cons0.push_back(1);
+               else if ( c == 'G' ) cons0.push_back(2);
+               else if ( c == 'T' ) cons0.push_back(3);    }
+          if ( cons0.size( ) < 100 ) continue;
+          MultipleAligner ma(
+               Scorer( 0.005, 0.008, 0.003 ), gvec( cons0 ) );
+          for ( int i = 0; i < smp.isize( ); i++ )
+          {    if ( i == best ) continue;
+               bvec rd;
+               for ( int j = 0; j < smp[i].isize( ); j++ )
+               {    char c = smp[i][j];
+                    if ( c == 'A' ) rd.push_back(0);
+                    else if ( c == 'C' ) rd.push_back(1);
+                    else if ( c == 'G' ) rd.push_back(2);
+                    else if ( c == 'T' ) rd.push_back(3);    }
+               if ( rd.size( ) < 100 ) continue;
+               ma.addRead( rd.begin( ), rd.end( ) );    }
+          bvec cons = ma.getConsensus( );
+          String out;
+          out.reserve( cons.size( ) );
+          for ( size_t z = 0; z < cons.size( ); z++ )
+               out.push_back( Base::val2Char( cons[z] ) );
+          if ( out.isize( ) >= 100 )
+               gap_cons[ kv.first ] = out;    }
+     cout << Date( ) << ": gap consensus: "
+          << gap_cons.size( ) << " junctions with read-backed gap"
+          << " sequences" << endl;
+     // ---- 6c. P4 phase 1: gap threading ----
+
+     // The coarse waypoints make the walk jump over the small edges
+     // between backbone neighbors; the graph holds most of that
+     // sequence.  For each jump with a read gap estimate, search
+     // the graph for a connecting interior path of the right size
+     // and splice it in.  Jumps with no consistent path stay as
+     // N-gaps (true gaps, reported for ONT-consensus filling).
+     int64_t n_gaps_filled = 0, n_gaps_kept = 0, n_bp_filled = 0,
+          n_gaps_ambig = 0;
+     {    Ofstream( gout, out_head + ".gaps.txt" );
+          gout << "# left_edge right_edge gap_mean gap_sd n_reads"
+               << " (kept N-gaps: ONT-consensus targets)\n";
+          // Duplication guard: 19-mer codes of the deep flanks
+          // (outside the K-1 vertex-overlap zones, which are shared
+          // by construction).  A candidate interior sharing a
+          // sampled 19-mer with a flank duplicates placed
+          // sequence -- e.g. an inverted-repeat side copy -- and is
+          // rejected even when its size matches the read gap.
+          auto kmer_codes = [&]( bvec const& bv, int from, int to,
+               std::set<uint64_t>& codes )
+          {    int const KK = 19;
+               if ( to - from < KK ) return;
+               uint64_t mask = ( uint64_t(1) << (2*KK) ) - 1;
+               uint64_t c = 0;
+               for ( int j = from; j < to; j++ )
+               {    c = ( ( c << 2 ) | bv[j] ) & mask;
+                    if ( j - from >= KK - 1 ) codes.insert(c);    }    };
+          for ( int pi = 0; pi < paths.isize( ); pi++ )
+          {    vec<int>& path = paths[pi];
+               std::set<int> pset( path.begin( ), path.end( ) );
+               vec<int> out;
+               for ( int i = 0; i < path.isize( ); i++ )
+               {    if ( i > 0 )
+                    {    int a = out.back( ), b = path[i];
+                         if ( to_right[a] != to_left[b] )
+                         {    // Jump: read gap estimate.
+                              int gap = 100;
+                              auto jit = jump_gap.find( { a, b } );
+                              if ( jit != jump_gap.end( )
+                                   && jit->second.count > 0 )
+                                   gap = Max( 1, int( double(
+                                        jit->second.gap_sum)
+                                        / jit->second.count ) );
+                              // Read gap estimates are precise
+                              // (sd <= 12 bp on E. coli), so the
+                              // acceptance slop only needs to cover
+                              // ONT indel drift over the gap span.
+                              int slop = 100 + gap / 10;
+                              int64_t budget =
+                                   gap + slop + OVER;
+                              // Depth-first enumeration of interior
+                              // graph paths a -> ... -> b.
+                              vec< vec<int> > cands;
+                              int64_t explored = 0;
+                              std::function<void(int, vec<int>,
+                                   int64_t)> dfs =
+                                   [&]( int v, vec<int> ip,
+                                        int64_t sz )
+                              {    if ( cands.isize( ) >= 64 )
+                                        return;
+                                   if ( ++explored > 100000 )
+                                        return;
+                                   if ( v == to_left[b] )
+                                   {    if ( ip.isize( ) > 0
+                                             && abs( int( sz - OVER
+                                                  - gap ) )
+                                                  <= slop )
+                                             cands.push_back(ip);
+                                        return;    }
+                                   if ( hb.FromSize(v) == 0 )
+                                        return;
+                                   for ( int j = 0;
+                                        j < hb.FromSize(v); j++ )
+                                   {    int e2 = hb.IFrom( v, j );
+                                        if ( pset.count(e2) )
+                                             continue;
+                                        // Also skip mirror copies:
+                                        // the doubled graph holds
+                                        // both orientations, and an
+                                        // interior containing the
+                                        // involution of a placed
+                                        // edge would duplicate its
+                                        // sequence (inverted).
+                                        if ( pset.count( inv[e2] ) )
+                                             continue;
+                                        if ( edge_class[e2]
+                                                  == EDGE_REPEAT )
+                                             continue;
+                                        int64_t sz2 = sz
+                                             + edges[e2].isize( )
+                                             - OVER;
+                                        if ( sz2 > budget )
+                                             continue;
+                                        if ( ip.isize( ) >= 24 )
+                                             continue;
+                                        vec<int> ip2 = ip;
+                                        ip2.push_back(e2);
+                                        dfs( to_right[e2], ip2,
+                                             sz2 );    }    };
+                              dfs( to_right[a], vec<int>( ), 0 );
+                              if ( VERBOSE )
+                              {    cout << "  fill e" << a
+                                        << " -> e" << b
+                                        << " gap=" << gap
+                                        << " cands="
+                                        << cands.isize( );
+                                   for ( int c = 0;
+                                        c < cands.isize( ); c++ )
+                                   {    cout << " [";
+                                        for ( int e2 : cands[c] )
+                                             cout << " " << e2
+                                                  << "("
+                                                  << edges[e2]
+                                                       .isize( )
+                                                  << ")";
+                                        cout << " ]";    }
+                                   cout << endl;    }
+                              if ( cands.isize( ) > 0 )
+                              {    // Duplication guard first.
+                                   std::set<uint64_t> dup;
+                                   {    bvec const& va = edges[a];
+                                        int la = va.isize( );
+                                        kmer_codes( va,
+                                             Max( 0, la - 1000 ),
+                                             Max( 0, la - 250 ),
+                                             dup );
+                                        bvec const& vb = edges[b];
+                                        int lb = vb.isize( );
+                                        kmer_codes( vb,
+                                             Min( 250, lb ),
+                                             Min( 1000, lb ),
+                                             dup );    }
+                                   vec< vec<int> > pass;
+                                   for ( int c = 0;
+                                        c < cands.isize( ); c++ )
+                                   {    Bool dup_hit = False;
+                                        for ( int e2 : cands[c] )
+                                        {    bvec const& v =
+                                                  edges[e2];
+                                             int le = v.isize( );
+                                             int from =
+                                                  Min( 250, le );
+                                             int to =
+                                                  Max( from,
+                                                       le - 250 );
+                                             int step = Max( 1,
+                                                  ( to - from )
+                                                  / 10 );
+                                             uint64_t mask =
+                                                  ( uint64_t(1)
+                                                  << 38 ) - 1;
+                                             for ( int p = from;
+                                                  p + 19 <= to;
+                                                  p += step )
+                                             {    uint64_t c2 = 0;
+                                                  for ( int j = p;
+                                                       j < p + 19;
+                                                       j++ )
+                                                       c2 =
+                                                       ( ( c2 << 2 )
+                                                       | v[j] )
+                                                       & mask;
+                                                  if ( dup.count(
+                                                            c2 ) )
+                                                  {    dup_hit =
+                                                            True;
+                                                       break;    }    }
+                                             if ( dup_hit )
+                                                  break;    }
+                                        if ( !dup_hit )
+                                             pass.push_back(
+                                                  cands[c] );    }
+                                   // Reads-consistency: the junction's
+                                   // ONT consensus is ground truth; a
+                                   // candidate route whose sequence
+                                   // contradicts it (e.g. the wrong
+                                   // arm's copy of an inverted
+                                   // repeat) is rejected even when
+                                   // it is the only candidate -- the
+                                   // gap is then filled from the
+                                   // reads themselves.
+                                   {    auto cit = gap_cons.find(
+                                             { a, b } );
+                                        if ( VERBOSE && cit
+                                             != gap_cons.end( ) )
+                                             cout << "  cons e" << a
+                                                  << "->e" << b
+                                                  << " len="
+                                                  << cit->second
+                                                       .isize( )
+                                                  << endl;
+                                        if ( cit != gap_cons.end( )
+                                             && pass.isize( ) > 0 )
+                                        {    String const& cons =
+                                                  cit->second;
+                                             vec<uint64_t> probes;
+                                             uint64_t mask =
+                                                  ( uint64_t(1)
+                                                  << 38 ) - 1;
+                                             for ( int p = 0;
+                                                  p + 19
+                                                       <= cons
+                                                       .isize( );
+                                                  p += Max( 20,
+                                                       cons.isize( )
+                                                       / 20 ) )
+                                             {    Bool ok2 = True;
+                                                  uint64_t c2 = 0;
+                                                  for ( int j = p;
+                                                       j < p + 19;
+                                                       j++ )
+                                                  {    char ch =
+                                                            cons[j];
+                                                       if ( ch
+                                                            == 'A' )
+                                                            c2 =
+                                                            ( c2 << 2 );
+                                                       else if ( ch
+                                                            == 'C' )
+                                                            c2 =
+                                                            ( c2 << 2 )
+                                                            | 1;
+                                                       else if ( ch
+                                                            == 'G' )
+                                                            c2 =
+                                                            ( c2 << 2 )
+                                                            | 2;
+                                                       else if ( ch
+                                                            == 'T' )
+                                                            c2 =
+                                                            ( c2 << 2 )
+                                                            | 3;
+                                                       else
+                                                       {    ok2 =
+                                                                 False;
+                                                            break;    }    }
+                                                  if ( ok2 )
+                                                       probes
+                                                       .push_back(
+                                                            c2 );    }
+                                             if ( probes.isize( )
+                                                       >= 5 )
+                                             {    vec< vec<int> >
+                                                        ok;
+                                                  for ( int c = 0;
+                                                       c <
+                                                       pass.isize( );
+                                                       c++ )
+                                                  {    std::set<
+                                                            uint64_t >
+                                                            cset;
+                                                       for ( int e2 :
+                                                            pass[c] )
+                                                            kmer_codes(
+                                                                 edges[
+                                                                 e2 ],
+                                                                 0,
+                                                                 edges[
+                                                                 e2 ]
+                                                                 .isize( ),
+                                                                 cset );
+                                                       int hits = 0;
+                                                       for ( auto c2 :
+                                                            probes )
+                                                            if ( cset
+                                                                 .count(
+                                                                 c2 ) )
+                                                                 hits++;
+                                                       if ( hits * 2
+                                                            >= (int)
+                                                                 probes
+                                                                 .isize( ) )
+                                                            ok
+                                                            .push_back(
+                                                                 pass[
+                                                                 c ] );    }
+                                                  pass = ok;    }    }    }
+                                   if ( pass.isize( ) == 0 )
+                                   {    n_gaps_kept++;
+                                        double sd = 0.0;
+                                        if ( jit != jump_gap.end( )
+                                             && jit->second.count
+                                                  > 0 )
+                                        {    double mean =
+                                                  double(
+                                                  jit->second.gap_sum)
+                                                  / jit->second.count;
+                                             double var =
+                                                  double(
+                                                  jit->second.gap_sq)
+                                                  / jit->second.count
+                                                  - mean * mean;
+                                             sd = var > 0
+                                                  ? std::sqrt(var)
+                                                  : 0.0;
+                                             gout << a << " " << b
+                                                  << " " << mean
+                                                  << " " << sd
+                                                  << " "
+                                                  << jit->second
+                                                       .count
+                                                  << "\n";    }
+                                        else
+                                             gout << a << " " << b
+                                                  << " " << gap
+                                                  << " 0 0\n";    }
+                                   else
+                                   {    cands = pass;
+                                   // Pick the interior whose chain
+                                   // size best matches the read gap
+                                   // (ties: fewest edges).
+                                   int best = 0, bestd = 0;
+                                   for ( int c = 0;
+                                        c < cands.isize( ); c++ )
+                                   {    int64_t sz = 0;
+                                        for ( int e2 : cands[c] )
+                                             sz += edges[e2].isize( )
+                                                  - OVER;
+                                        int d = abs( int(
+                                             sz - OVER - gap ) );
+                                        if ( c == 0 || d < bestd
+                                             || ( d == bestd
+                                                  && cands[c]
+                                                       .isize( )
+                                                       < cands[best]
+                                                       .isize( ) ) )
+                                        {    bestd = d;
+                                             best = c;    }    }
+                                   // Mirror-route ambiguity: if the
+                                   // candidate set contains two
+                                   // interiors that are involution
+                                   // images of each other (a fwd/rc
+                                   // route pair through an inverted
+                                   // repeat), the graph cannot tell
+                                   // which one is placed -- keep
+                                   // the N-gap for read-based
+                                   // filling.  Variant-bubble
+                                   // haplotypes are not mirrors and
+                                   // are filled normally.
+                                   Bool mirror_pair = False;
+                                   for ( int c1 = 0;
+                                        c1 < cands.isize( ); c1++ )
+                                   {    for ( int c2 = c1 + 1;
+                                             c2 < cands.isize( );
+                                             c2++ )
+                                        {    int k =
+                                                  cands[c1].isize( );
+                                             if ( k
+                                                  != cands[c2]
+                                                       .isize( ) )
+                                                  continue;
+                                             Bool m = True;
+                                             for ( int t = 0;
+                                                  t < k; t++ )
+                                                  if ( cands[c2]
+                                                       [ k-1-t ]
+                                                       != inv[
+                                                       cands[c1]
+                                                       [ t ] ] )
+                                                  {    m = False;
+                                                       break;    }
+                                             if ( m )
+                                             {    mirror_pair =
+                                                       True;
+                                                  break;    }    }
+                                        if ( mirror_pair ) break;    }
+                                   if ( mirror_pair )
+                                   {    // Ambiguous fwd/rc route:
+                                        // keep the N-gap for
+                                        // read-based filling.
+                                        n_gaps_ambig++;
+                                        if ( jit != jump_gap.end( )
+                                             && jit->second.count
+                                                  > 0 )
+                                        {    double mean =
+                                                  double(
+                                                  jit->second.gap_sum)
+                                                  / jit->second.count;
+                                             double var =
+                                                  double(
+                                                  jit->second.gap_sq)
+                                                  / jit->second.count
+                                                  - mean * mean;
+                                             double sd = var > 0
+                                                  ? std::sqrt(var)
+                                                  : 0.0;
+                                             gout << a << " " << b
+                                                  << " " << mean
+                                                  << " " << sd
+                                                  << " "
+                                                  << jit->second
+                                                       .count
+                                                  << " ambiguous"
+                                                  << "\n";    }
+                                        else
+                                             gout << a << " " << b
+                                                  << " " << gap
+                                                  << " 0 0"
+                                                  << " ambiguous"
+                                                  << "\n";    }
+                                   else
+                                   {
+                                   for ( int e2 : cands[best] )
+                                   {    out.push_back(e2);
+                                        n_bp_filled +=
+                                             edges[e2].isize( )
+                                             - OVER;    }
+                                   n_gaps_filled++;    }    }    }
+                              else
+                              {    n_gaps_kept++;
+                                   double sd = 0.0;
+                                   if ( jit != jump_gap.end( )
+                                        && jit->second.count > 0 )
+                                   {    double mean = double(
+                                             jit->second.gap_sum)
+                                             / jit->second.count;
+                                        double var =
+                                             double(
+                                             jit->second.gap_sq)
+                                             / jit->second.count
+                                             - mean * mean;
+                                        sd = var > 0
+                                             ? std::sqrt(var)
+                                             : 0.0;
+                                        gout << a << " " << b
+                                             << " " << mean
+                                             << " " << sd << " "
+                                             << jit->second.count
+                                             << "\n";    }
+                                   else
+                                        gout << a << " " << b
+                                             << " " << gap
+                                             << " 0 0\n";    }    }    }
+                    out.push_back( path[i] );    }
+               path = out;    }    }
+     cout << Date( ) << ": gap threading: filled "
+          << n_gaps_filled << " gaps ("
+          << ToStringAddCommas(n_bp_filled)
+          << " bp from the graph), " << n_gaps_kept
+          << " kept as N-gaps (" << n_gaps_ambig
+          << " ambiguous routes)" << endl;
      // Path termini diagnostics: why did each walk stop?
      if ( VERBOSE )
      {    Ofstream( pout, out_head + ".paths.txt" );
@@ -1422,7 +2038,9 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
                pout << "path " << i << " (" << path.size( )
                     << " edges, circular="
                     << ( circular[i] ? "yes" : "no" ) << "):";
-               for ( int e : path ) pout << " " << e;
+               for ( int e : path )
+                    pout << " " << e << "("
+                         << edges[e].isize( ) << ")";
                pout << "\n";
                int t = path.back( );
                int w = to_right[t];
@@ -1456,8 +2074,10 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
      // ---- 7. Output ----
 
      {    Ofstream( fout, out_head + ".scaffold.fasta" );
+          Ofstream( fills, out_head + ".ontfills.fasta" );
           vec<int> scaffold_lens;
-          int n_circ = 0, n_jumps = 0;
+          int n_circ = 0, n_jumps = 0, n_gaps_ont = 0;
+          int64_t n_bp_ont = 0;
           int64_t n_gap_bp = 0;
           for ( int i = 0; i < paths.isize( ); i++ )
           {    vec<int> const& path = paths[i];
@@ -1479,16 +2099,55 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
                     if ( j < path.isize( ) - 1
                          && to_right[e] != to_left[ path[j+1] ] )
                     {    n_jumps++;
-                         int gap = 100;
-                         auto it = jump_gap.find( { e, path[j+1] } );
-                         if ( it != jump_gap.end( )
-                              && it->second.count > 0 )
-                              gap = Max( 1, int( double(
-                                   it->second.gap_sum)
-                                   / it->second.count ) );
-                         gap = Min( gap, 20000 );
-                         n_gap_bp += gap;
-                         seq_out.append( String( gap, 'N' ) );    }    }
+                         // P4 phase 2: an ONT-consensus gap sequence
+                         // takes precedence over N's.
+                         auto cit = gap_cons.find(
+                              { e, path[j+1] } );
+                         if ( cit != gap_cons.end( ) )
+                         {    n_gaps_ont++;
+                              n_bp_ont += cit->second.isize( );
+                              seq_out.append( cit->second );
+                              // Record the fill for consensus
+                              // quality evaluation.
+                              fills << ">ontfill_e" << e
+                                    << "_e" << path[j+1]
+                                    << " len="
+                                    << cit->second.isize( )
+                                    << "\n";
+                              for ( int z = 0;
+                                   z < cit->second.isize( );
+                                   z += 70 )
+                                   fills << cit->second
+                                        .substr( z, 70 )
+                                        << "\n";    }
+                         else
+                         {    if ( VERBOSE )
+                                   cout << "  N-gap e" << e
+                                        << " -> e" << path[j+1]
+                                        << ": cons="
+                                        << ( gap_cons.count(
+                                                  { e, path[j+1] } )
+                                                  ? "yes" : "no" )
+                                        << " samples="
+                                        << ( gap_reads.count(
+                                                  { e, path[j+1] } )
+                                                  ? (int) gap_reads[
+                                                       { e,
+                                                       path[j+1] } ]
+                                                       .size( )
+                                                  : 0 )
+                                        << endl;    int gap = 100;
+                              auto it = jump_gap.find(
+                                   { e, path[j+1] } );
+                              if ( it != jump_gap.end( )
+                                   && it->second.count > 0 )
+                                   gap = Max( 1, int( double(
+                                        it->second.gap_sum)
+                                        / it->second.count ) );
+                              gap = Min( gap, 20000 );
+                              n_gap_bp += gap;
+                              seq_out.append(
+                                   String( gap, 'N' ) );    }    }    }
                fout << ">scaffold_" << i << " edges=" << path.size( )
                     << " len=" << seq_out.size( )
                     << ( circular[i] ? " circular=True" : "" )
@@ -1524,6 +2183,8 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
            cout << "  scaffold paths: " << paths.size( ) << " ("
                 << n_circ << " circular)\n";
            cout << "  gap jumps in output: " << n_jumps << " ("
+                << n_gaps_ont << " ONT-filled, "
+                << ToStringAddCommas(n_bp_ont) << " bp; "
                 << ToStringAddCommas(n_gap_bp) << " N bp)\n";
            cout << "  scaffold total: "
                 << ToStringAddCommas(scaffold_total) << " bp\n";
