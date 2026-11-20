@@ -582,6 +582,28 @@ subst/del/ins ≈ 0.5/0.8/0.3%) yields **99.85% mean identity,
 worst fill 99.25%** — and the stronger consensus also validates
 more graph routes (100 vs 90 fills).
 
+**K=60 polish via LoRDEC bridging (optional, not the default).**
+With `SAVE_60=True` the pipeline persists the K=60 unipath
+graph.  `ScaffoldLongReads K60_FASTB=<a.60/a.fastb>` implements
+the LoRDEC view (Salmela & Rivals): the consensus fill acts as a
+long read — its error-free 31-mer blocks are *solid anchors*
+onto the K=60 edges, and the intervals between anchors are
+*bridged* by BFS paths through the graph, chosen by matching
+the fill's expected span.  A bridge is accepted only after
+validating the assembled sequence against the ONT consensus it
+replaces (15-mer probes, 60% threshold) — bridges through wrong
+repeat branches are rejected, which is what happened to the e272
+bridge that scored 76.7% identity without the check.
+
+On E. coli: 1319 bridges found, 15 of 171 consensus fills
+polished to PE accuracy (9,131 bp).  **But the 9 fills actually
+emitted into the scaffold are in rrn-adjacent regions where
+even the K=60 graph offers only paths that contradict the
+reads** — for those, the MultipleAligner ONT consensus at
+99.85% is the ceiling.  The default (`K60_FASTB=""`) keeps the
+pure ONT MSA path: simpler, faster, and empirically equivalent
+for the emitted fills.
+
 **Full-run verification (Disco evaluation).**  A complete fresh
 pipeline run (`DiscovarExp READS=… OUT_DIR=… REFHEAD=…`)
 reproduces the E. coli acceptance bit-identically — the stats
@@ -618,8 +640,10 @@ both arms so the comparison is apples-to-apples.)
 P4 criterion ("captured-gap count reduced ≥50%, no quality
 regression in filled gaps"): N-bp reduced **100%**; fills carry
 0.15% consensus error at full coverage — pass.  Remaining
-polish: quality-weighted consensus scoring once ONT qualities
-are available, and the e288 upstream fix.
+polish: the K=60 polish covers every gap the base graph
+assembled; the 9 emitted fills are K=60-invisible (rrn-adjacent
+spacers) and would need ONT quality-weighted scoring or more
+spanning reads to push past 99.85%; plus the e288 upstream fix.
 
 
 | Metric | PE-only | LR-2 v1 (matching) | LR-2 v2 (threading) |

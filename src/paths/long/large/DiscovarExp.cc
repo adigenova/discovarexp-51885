@@ -34,6 +34,9 @@ int main(int argc, char *argv[])
      CommandArgument_Double_OrDefault_Doc( MAX_MEM_GB, 0,
           "if specified, maximum allowed RAM use in GB; in some cases may be "
           "exceeded by our code");
+     CommandArgument_Bool_OrDefault_Doc( SAVE_60, False,
+          "create a.60 directory with the K=60 base graph (consumed by "
+          "ScaffoldLongReads K60_FASTB for ONT-consensus polishing)");
      EndCommandArguments;
 
      GapToyCore(argc,argv);

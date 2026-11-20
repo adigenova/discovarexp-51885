@@ -54,6 +54,7 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
      const double min_map_id,     // mm2: min mapping identity
      const int min_seg,           // mm2: min per-edge segment length
      const String& debug_read,    // mm2: dump link storage for this read
+     const String& k60_fastb,     // P4: K=60 base graph edges (polish)
      const String& out_head, const Bool VERBOSE );
 
 #endif /* LONG_READ_SCAFFOLD_H_ */

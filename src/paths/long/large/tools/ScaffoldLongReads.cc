@@ -65,6 +65,16 @@ int main(int argc, char *argv[])
           "mm2 (with VERBOSE=True): dump the raw PAF, the per-edge"
           " path segments, and every stored link record for this"
           " read");
+     CommandArgument_String_OrDefault_Doc(K60_FASTB, "",
+          "optional (LoRDEC-style K=60 polish; default empty = ONT"
+          " MSA only).  a.fastb of the K=60 base graph (SAVE_60="
+          "True writes OUT_DIR/a.60/a.fastb).  The consensus fills"
+          " are seeded onto the K=60 unipath edges and bridged"
+          " through the graph, validated against the reads.  On"
+          " E. coli this helped 15 of 171 fills but could not"
+          " improve the 9 emitted ones (rrn-adjacent repeats) --"
+          " the MultipleAligner ONT consensus is the better"
+          " default for ONT gaps");
      CommandArgument_Int_OrDefault_Doc(MIN_SEG, 3500,
           "mm2: drop per-edge path segments shorter than this before"
           " voting.  Swept on E. coli (500..10000): 3500 gives ONE"
@@ -101,7 +111,7 @@ int main(int argc, char *argv[])
           REPEAT_FACTOR, MIN_LINE, MAX_BFS_DEPTH,
           MAX_MULT, MIN_ANCHOR_BLOCK, MIN_CHAIN_COV,
           MAPPER, MINIMAP2, MIN_MAP_LEN, MIN_MAP_ID, MIN_SEG,
-          DEBUG_READ, OUT_HEAD, VERBOSE );
+          DEBUG_READ, K60_FASTB, OUT_HEAD, VERBOSE );
 
      Scram(0);
 }

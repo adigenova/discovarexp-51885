@@ -61,6 +61,7 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
      const String& mapper, const String& mm2_bin,
      const int min_map_len, const double min_map_id,
      const int min_seg, const String& debug_read,
+     const String& k60_fastb,
      const String& out_head, const Bool VERBOSE )
 {
      ForceAssertLe( K, 32u );
@@ -1587,6 +1588,390 @@ void ScaffoldWithLongReads( const HyperBasevector& hb,
      cout << Date( ) << ": gap consensus: "
           << gap_cons.size( ) << " junctions with read-backed gap"
           << " sequences" << endl;
+
+     // ---- P4 phase 2b: polish the ONT consensus against the K=60
+     // base graph ----
+
+     // The LoRDEC view (Salmela & Rivals): the consensus fill is
+     // a long read; its error-free k-mer blocks are solid anchors
+     // onto the K=60 unipath graph, and the intervals between
+     // anchors are bridged by paths through the graph, chosen
+     // by matching the fill's expected span.  Where a bridge
+     // exists the fill becomes PE-grade; intervals the graph
+     // cannot bridge keep the ONT consensus.
+     int64_t n_gaps_polished = 0, n_bp_polished = 0;
+     int64_t n_bridges = 0, n_bp_bridged = 0, n_bp_unbridged = 0;
+     if ( k60_fastb != "" && IsRegularFile( k60_fastb ) )
+     {    vecbasevector k60( k60_fastb );
+          HyperBasevector hb60;
+          String k60_hbv = k60_fastb;
+          {    size_t dot = k60_hbv.rfind( ".fastb" );
+               if ( dot != String::npos )
+                    k60_hbv.resize(dot);
+               k60_hbv += ".hbv";    }
+          Bool have60 = IsRegularFile( k60_hbv );
+          vec<int> to_left60, to_right60;
+          if ( have60 )
+          {    BinaryReader::readFile( k60_hbv, &hb60 );
+               hb60.ToLeft(to_left60);
+               hb60.ToRight(to_right60);    }
+          int const OVER60 = 59;
+          struct E60 { uint64_t code; uint32_t e; uint32_t o; };
+          std::vector<E60> idx;
+          {    int const KP = 31;
+               size_t nkm = 0;
+               for ( size_t e = 0; e < k60.size( ); e++ )
+                    if ( k60[e].size( ) >= KP )
+                         nkm += k60[e].size( ) - KP + 1;
+               idx.reserve(nkm);
+               uint64_t const mask =
+                    ( uint64_t(1) << (2*KP) ) - 1;
+               for ( size_t e = 0; e < k60.size( ); e++ )
+               {    bvec const& bv = k60[e];
+                    if ( bv.size( ) < size_t(KP) ) continue;
+                    uint64_t c = 0;
+                    for ( size_t j = 0; j < size_t(KP); j++ )
+                         c = ( c << 2 ) | bv[j];
+                    idx.push_back( { c, uint32_t(e), 0 } );
+                    for ( size_t j = KP; j < bv.size( ); j++ )
+                    {    c = ( ( c << 2 ) | bv[j] ) & mask;
+                         idx.push_back( { c, uint32_t(e),
+                              uint32_t(j-KP+1) } );    }    }
+               std::sort( idx.begin( ), idx.end( ),
+                    []( E60 const& a, E60 const& b )
+                    {    if ( a.code < b.code ) return true;
+                         if ( a.code > b.code ) return false;
+                         if ( a.e < b.e ) return true;
+                         if ( a.e > b.e ) return false;
+                         return a.o < b.o;    } );    }
+          for ( auto& kv : gap_cons )
+          {    String const& cons = kv.second;
+               int const KP = 31;
+               if ( cons.isize( ) < 4 * KP ) continue;
+               // hits grouped by edge
+               std::map<int, vec< std::pair<int,int> > > hits;
+               uint64_t const mask =
+                    ( uint64_t(1) << (2*KP) ) - 1;
+               uint64_t c = 0;
+               int step = Max( 5, cons.isize( ) / 300 );
+               for ( int j = 0; j < cons.isize( ); j++ )
+               {    char ch = cons[j];
+                    uint64_t b2;
+                    if ( ch == 'A' ) b2 = 0;
+                    else if ( ch == 'C' ) b2 = 1;
+                    else if ( ch == 'G' ) b2 = 2;
+                    else if ( ch == 'T' ) b2 = 3;
+                    else break;
+                    c = ( ( c << 2 ) | b2 ) & mask;
+                    if ( j + 1 < KP ) continue;
+                    if ( ( j + 1 - KP ) % step ) continue;
+                    auto lo = std::lower_bound(
+                         idx.begin( ), idx.end( ),
+                         E60{ c, 0, 0 },
+                         []( E60 const& a, E60 const& b )
+                         {    return a.code < b.code;    } );
+                    auto hi = std::upper_bound(
+                         idx.begin( ), idx.end( ),
+                         E60{ c, 0, 0 },
+                         []( E60 const& a, E60 const& b )
+                         {    return a.code < b.code;    } );
+                    for ( auto it = lo; it != hi; ++it )
+                    {    hits[ it->e ].push_back(
+                              std::make_pair( j + 1 - KP,
+                                   int(it->o) ) );    }    }
+               // Best collinear chain per edge -> solid blocks.
+               struct Block
+               {    int f1, f2, e, o1, o2;    };
+               vec<Block> blocks;
+               for ( auto& hkv : hits )
+               {    vec< std::pair<int,int> >& hh = hkv.second;
+                    Sort(hh);
+                    int b_c1 = 0, b_o1 = 0, b_c2 = 0, b_o2 = 0,
+                         b_cov = 0;
+                    int c1 = 0, o1 = 0, cov = 0;
+                    for ( int t = 0; t < hh.isize( ); t++ )
+                    {    if ( t == 0 )
+                         {    c1 = hh[t].first;
+                              o1 = hh[t].second;
+                              cov = 0;    }
+                         else
+                         {    int dc = hh[t].first - hh[t-1].first;
+                              int doo = hh[t].second - hh[t-1].second;
+                              if ( doo <= 0
+                                   || abs( doo - dc )
+                                        > 50 + dc / 10 )
+                              {    if ( cov > b_cov )
+                                   {    b_cov = cov;
+                                        b_c1 = c1;  b_o1 = o1;
+                                        b_c2 = hh[t-1].first;
+                                        b_o2 =
+                                             hh[t-1].second;    }
+                                   c1 = hh[t].first;
+                                   o1 = hh[t].second;
+                                   cov = 0;    }
+                              cov = hh[t].first - c1;    }    }
+                    if ( cov > b_cov )
+                    {    b_cov = cov;
+                         b_c1 = c1;  b_o1 = o1;
+                         b_c2 = hh.back( ).first;
+                         b_o2 = hh.back( ).second;    }
+                    if ( b_cov >= KP )
+                         blocks.push_back( { b_c1, b_c2,
+                              hkv.first, b_o1, b_o2 } );    }
+               if ( blocks.isize( ) == 0 ) continue;
+               // Keep the best non-overlapping chain of blocks
+               // ordered along the fill (LoRDEC's solid blocks).
+               std::sort( blocks.begin( ), blocks.end( ),
+                    []( Block const& a, Block const& b )
+                    {    if ( a.f1 != b.f1 ) return a.f1 < b.f1;
+                         return a.f2 > b.f2;    } );
+               vec<Block> keep;
+               {    int last_f2 = -1;
+                    for ( auto const& b : blocks )
+                         if ( b.f1 > last_f2 )
+                         {    keep.push_back(b);
+                              last_f2 = b.f2;    }    }
+               blocks = keep;
+               // Build the polished sequence: extend the first
+               // block backward and the last forward to the full
+               // fill span, bridge between consecutive blocks
+               // with graph paths (LoRDEC), keep ONT consensus
+               // only where no bridge is found.
+               Block& B0 = blocks.front( );
+               Block& BN = blocks.back( );
+               int from0 = Max( 0, B0.o1 - B0.f1 );
+               int toN = Min( k60[ BN.e ].isize( ),
+                    BN.o2 + ( cons.isize( ) - BN.f2 ) );
+               // assemble: [graph segment pieces] with bridges
+               String pol;
+               int graph_bp = 0, onts_bp = 0;
+               // first block's own segment
+               {    bvec const& ev = k60[ B0.e ];
+                    int from = Max( from0, B0.o1 );
+                    from = Min( from, B0.o1 );    // keep simple
+                    for ( int j = Max( from0, B0.o1 );
+                          j < B0.o2; j++ )
+                         pol.push_back(
+                              Base::val2Char( ev[j] ) );
+                    graph_bp += B0.o2 - Max( from0, B0.o1 );
+                    // lead-in: bases before the first block
+                    // (graph if it extends, else ONT)
+                    if ( B0.f1 > 0 )
+                    {    if ( B0.o1 - from0 >= B0.f1
+                              && from0 + B0.f1 <= B0.o1 )
+                         {    String lead(
+                                   cons.substr( 0, B0.f1 ) );
+                              String leadg;
+                              for ( int j = B0.o1 - B0.f1;
+                                   j < B0.o1; j++ )
+                                   leadg.push_back(
+                                        Base::val2Char(
+                                             k60[ B0.e ][j] ) );
+                              pol = leadg + pol;
+                              graph_bp += B0.f1;    }
+                         else
+                         {    pol = cons.substr( 0, B0.f1 )
+                                   + pol;
+                              onts_bp += B0.f1;    }    }    }
+               // consecutive-block bridges
+               for ( int b = 0; b + 1 < blocks.isize( ); b++ )
+               {    Block& A = blocks[b];
+                    Block& Bc = blocks[b+1];
+                    int d = Bc.f1 - A.f2;
+                    Bool bridged = False;
+                    if ( A.e == Bc.e && Bc.o1 > A.o2
+                         && abs( ( Bc.o1 - A.o2 ) - d )
+                              <= 50 + d / 10 )
+                    {    // same-edge splice
+                         bvec const& ev = k60[ A.e ];
+                         for ( int j = A.o2; j < Bc.o1; j++ )
+                              pol.push_back(
+                                   Base::val2Char( ev[j] ) );
+                         graph_bp += Bc.o1 - A.o2;
+                         bridged = True;    }
+                    else if ( have60 )
+                    {    // LoRDEC bridge: BFS from A's right
+                         // vertex to B's left vertex, budgeted
+                         // by the fill distance.
+                         int budget = d + 50 + d / 10 + OVER60;
+                         int target = to_left60[ Bc.e ];
+                         vec< vec<int> > cands;
+                         int64_t explored = 0;
+                         std::function<void(int, vec<int>,
+                              int64_t)> dfs60 =
+                              [&]( int v, vec<int> ip,
+                                   int64_t sz )
+                         {    if ( cands.isize( ) >= 8 )
+                                   return;
+                              if ( ++explored > 20000 )
+                                   return;
+                              if ( v == target )
+                              {    if ( ip.isize( ) > 0 )
+                                        cands.push_back(ip);
+                                   return;    }
+                              if ( hb60.FromSize(v) == 0 )
+                                   return;
+                              for ( int j = 0;
+                                   j < hb60.FromSize(v); j++ )
+                              {    int e2 = hb60.IFrom( v, j );
+                                   int64_t sz2 = sz
+                                        + k60[ e2 ].isize( )
+                                        - OVER60;
+                                   if ( sz2 > budget )
+                                        continue;
+                                   if ( ip.isize( ) >= 12 )
+                                        continue;
+                                   vec<int> ip2 = ip;
+                                   ip2.push_back(e2);
+                                   dfs60( to_right60[ e2 ],
+                                        ip2, sz2 );    }    };
+                         dfs60( to_right60[ A.e ],
+                              vec<int>( ), 0 );
+                         if ( cands.isize( ) > 0 )
+                         {    // pick the bridge whose span
+                              // matches the fill distance
+                              int best = 0, bestd = 0;
+                              for ( int cb = 0;
+                                   cb < cands.isize( ); cb++ )
+                              {    int64_t sz = -OVER60;
+                                   for ( int e2 : cands[cb] )
+                                        sz += k60[ e2 ]
+                                             .isize( );
+                                   int dd =
+                                        abs( int( sz - d ) );
+                                   if ( cb == 0
+                                        || dd < bestd )
+                                   {    bestd = dd;
+                                        best = cb;    }    }
+                              for ( int t = 0;
+                                   t < cands[best].isize( );
+                                   t++ )
+                              {    int e2 =
+                                        cands[best][t];
+                                   bvec const& ev =
+                                        k60[ e2 ];
+                                   int from =
+                                        ( t == 0
+                                             ? OVER60 : 0 );
+                                   if ( t == 0 && A.e ==
+                                        cands[best][0] )
+                                        from = A.o2;
+                                   for ( int j = from;
+                                        j < ev.isize( ); j++ )
+                                        pol.push_back(
+                                             Base::val2Char(
+                                                  ev[j] ) );
+                                   graph_bp +=
+                                        ev.isize( ) - from;    }
+                              // consume the overlap into B
+                              bridged = True;
+                              n_bridges++;    }    }
+                    if ( !bridged )
+                    {    pol.append(
+                              cons.substr( A.f2,
+                                   Bc.f1 - A.f2 ) );
+                         onts_bp += Bc.f1 - A.f2;
+                         n_bp_unbridged +=
+                              Bc.f1 - A.f2;    }    }
+               // middle block segments
+               for ( int b = 1; b < blocks.isize( ); b++ )
+               {    Block& Bc = blocks[b];
+                    bvec const& ev = k60[ Bc.e ];
+                    int from = ( b + 1 < blocks.isize( )
+                         ? Bc.o1 : Min( Bc.o1, toN ) );
+                    from = Bc.o1;
+                    int to = ( b + 1 == blocks.isize( )
+                         ? Max( Bc.o2, Min( toN,
+                              Bc.o2 + ( cons.isize( )
+                                   - Bc.f2 ) ) )
+                         : Bc.o2 );
+                    if ( to <= from ) continue;
+                    for ( int j = from; j < to; j++ )
+                         pol.push_back(
+                              Base::val2Char( ev[j] ) );
+                    graph_bp += to - from;
+                    n_bp_bridged += to - from;    }
+               // tail: bases after the last block
+               if ( BN.f2 < cons.isize( ) )
+               {    bvec const& ev = k60[ BN.e ];
+                    int tail = cons.isize( ) - BN.f2;
+                    int avail = ev.isize( ) - BN.o2;
+                    if ( avail >= tail )
+                    {    for ( int j = BN.o2;
+                              j < BN.o2 + tail; j++ )
+                              pol.push_back(
+                                   Base::val2Char(
+                                        ev[j] ) );
+                         graph_bp += tail;    }
+                    else
+                    {    pol.append( cons.substr( BN.f2,
+                              tail ) );
+                         onts_bp += tail;
+                         n_bp_unbridged += tail;    }    }
+               // accept the polished version if it is mostly
+               // graph and roughly the right size
+               int pol_len = pol.isize( );
+               int expected = cons.isize( );
+               if ( onts_bp * 100 > 20 * expected ) continue;
+               if ( pol_len < expected / 2
+                    || pol_len > expected * 3 / 2 ) continue;
+               if ( onts_bp > 0 && pol_len > expected + 200 )
+                    continue;
+               // reads-consistency (the lesson of the e272
+               // bridge): the bridge may connect the wrong
+               // repeat branch in the K=60 graph -- validate
+               // the polished sequence against the ONT consensus
+               // it replaces.  15-mers survive ONT noise
+               // (~0.9985^15 = 97.8% intact) while a wrong-
+               // branch bridge loses most of them.
+               if ( graph_bp > onts_bp )
+               {    int probes = 0, hits_cons = 0;
+                    int pstep = Max( 3, pol_len / 100 );
+                    for ( int p = 0; p + 15 <= pol_len;
+                         p += pstep )
+                    {    Bool found = False;
+                         for ( int q = 0; q + 15 <= expected;
+                              q += 3 )
+                              if ( cons.compare( q, 15,
+                                   pol, p, 15 ) == 0 )
+                              {    found = True;
+                                   break;    }
+                         if ( found ) hits_cons++;
+                         probes++;    }
+                    if ( probes >= 10
+                         && hits_cons * 100 < 60 * probes )
+                    {    if ( VERBOSE )
+                              cout << "  k60 e"
+                                   << kv.first.first
+                                   << "->e"
+                                   << kv.first.second
+                                   << " cons_len="
+                                   << cons.isize( )
+                                   << " REJECTED (bridge"
+                                   << " contradicts reads:"
+                                   << hits_cons << "/"
+                                   << probes << " probes)"
+                                   << endl;
+                         continue;    }    }
+               if ( pol_len >= 100 )
+               {    kv.second = pol;
+                    n_gaps_polished++;
+                    n_bp_polished += pol_len;    }
+               if ( VERBOSE )
+                    cout << "  k60 e" << kv.first.first
+                         << "->e" << kv.first.second
+                         << " cons_len=" << cons.isize( )
+                         << " blocks=" << blocks.isize( )
+                         << " pol_len=" << pol_len
+                         << " graph_bp=" << graph_bp
+                         << " onts_bp=" << onts_bp << endl;    }
+          cout << Date( ) << ": k60 polish (LoRDEC): "
+               << n_gaps_polished << " of " << gap_cons.size( )
+               << " consensus fills polished from the K=60 graph ("
+               << ToStringAddCommas(n_bp_polished)
+               << " bp, " << n_bridges << " bridges, "
+               << ToStringAddCommas(n_bp_unbridged)
+               << " bp kept as ONT)" << endl;    }
      // ---- 6c. P4 phase 1: gap threading ----
 
      // The coarse waypoints make the walk jump over the small edges
